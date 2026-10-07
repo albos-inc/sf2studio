@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
+use sf2synth::Synthesizer;
+
 use crate::analysis::Rendered;
 
 /// Frames a lane fades in or out over when turned on or off (about 10 ms).
@@ -16,8 +18,43 @@ pub struct LaneAudio {
     pub gain: f32,
 }
 
+/// Frames the live synthesizer renders at a time (small, so a key sounds
+/// at once).
+const LIVE_BLOCK: usize = 64;
+
+/// A synthesizer played from the on-screen or a MIDI keyboard.
+pub struct Live {
+    pub synth: Synthesizer,
+    /// Level-matching gain of the lane it plays.
+    pub gain: f32,
+    left: Vec<f32>,
+    right: Vec<f32>,
+    /// Frames of `left`/`right` not yet played.
+    ready: usize,
+    read: usize,
+}
+
+impl Live {
+    pub fn new(synth: Synthesizer, gain: f32) -> Live {
+        Live { synth, gain, left: vec![0.0; LIVE_BLOCK], right: vec![0.0; LIVE_BLOCK], ready: 0, read: 0 }
+    }
+
+    fn next(&mut self) -> (f32, f32) {
+        if self.read == self.ready {
+            self.synth.render(&mut self.left, &mut self.right);
+            self.ready = LIVE_BLOCK;
+            self.read = 0;
+        }
+        let i = self.read;
+        self.read += 1;
+        (self.left[i] * self.gain, self.right[i] * self.gain)
+    }
+}
+
 #[derive(Default)]
 pub struct Transport {
+    /// The keyboard's synthesizer, heard whether or not the lanes play.
+    pub live: Option<Live>,
     lanes: Vec<Option<LaneAudio>>,
     /// Which lanes are heard.
     outputs: Vec<bool>,
@@ -65,10 +102,13 @@ impl Transport {
     }
 
     fn next(&mut self) -> (f32, f32) {
+        let (mut left, mut right) = match &mut self.live {
+            Some(live) => live.next(),
+            None => (0.0, 0.0),
+        };
         if !self.playing {
-            return (0.0, 0.0);
+            return (left, right);
         }
-        let (mut left, mut right) = (0.0, 0.0);
         let position = self.position;
         for (i, lane) in self.lanes.iter().enumerate() {
             let target = if self.outputs[i] { 1.0 } else { 0.0 };

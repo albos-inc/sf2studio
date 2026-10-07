@@ -36,6 +36,12 @@ impl Source {
 pub enum Program {
     Pattern(TestPattern),
     Midi(PathBuf),
+    /// One note, played from the keyboard.
+    Note {
+        key: u8,
+        velocity: u8,
+        length: f32,
+    },
 }
 
 impl Program {
@@ -43,6 +49,7 @@ impl Program {
         match self {
             Program::Pattern(pattern) => Ok(pattern.midi()),
             Program::Midi(path) => std::fs::read(path).map_err(|e| format!("{}: {e}", path.display())),
+            Program::Note { key, velocity, length } => Ok(crate::patterns::single_note(*key, *velocity, *length)),
         }
     }
 }
@@ -88,6 +95,11 @@ impl Renderer {
 
     pub fn poll(&self) -> Vec<Done> {
         self.receiver.try_iter().collect()
+    }
+
+    /// The SF2 at `path`, from the cache or read now.
+    pub fn font(&self, path: &Path) -> Result<Arc<SoundFont>, String> {
+        load_font(path, &self.fonts)
     }
 
     /// Forgets a cached SF2 so it is read again (it changed on disk).

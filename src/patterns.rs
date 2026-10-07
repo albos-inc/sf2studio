@@ -104,6 +104,27 @@ impl TestPattern {
     }
 }
 
+/// When a keyboard note starts in its rendering.
+pub const NOTE_START: f64 = 0.05;
+
+/// One note: `key` at `velocity`, held `length` seconds.
+pub fn single_note(key: u8, velocity: u8, length: f32) -> Vec<u8> {
+    let mut events = Events::default();
+    events.note(NOTE_START, length.max(0.01) as f64, key, velocity.max(1));
+    events.into_midi()
+}
+
+/// The name of a MIDI key: C4 is 60.
+pub fn key_name(key: u8) -> String {
+    const NAMES: [&str; 12] = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+    format!("{}{}", NAMES[key as usize % 12], key as i32 / 12 - 1)
+}
+
+/// The frequency of a MIDI key (A4 = 440 Hz).
+pub fn key_hz(key: u8) -> f32 {
+    440.0 * ((key as f32 - 69.0) / 12.0).exp2()
+}
+
 #[derive(Default)]
 struct Events {
     /// (tick, order, bytes)
@@ -139,7 +160,7 @@ impl Events {
             last = *tick;
             track.extend_from_slice(bytes);
         }
-        write_variable_length(&mut track, Self::tick(1.0));
+        write_variable_length(&mut track, Self::tick(0.5));
         track.extend_from_slice(&[0xff, 0x2f, 0x00]);
 
         let mut out = b"MThd".to_vec();

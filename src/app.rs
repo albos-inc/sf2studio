@@ -11,9 +11,13 @@ use eframe::egui::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_ROWS, to_db};
-use crate::audio::{LaneAudio, Player};
-use crate::patterns::TestPattern;
+use sf2synth::Synthesizer;
+
+use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_HIGH_HZ, SPECTRUM_LOW_HZ, SPECTRUM_ROWS, to_db};
+use crate::audio::{LaneAudio, Live, Player};
+use crate::keyboard::{KeyEvent, Keyboard};
+use crate::midi_in::MidiIn;
+use crate::patterns::{NOTE_START, TestPattern, key_hz, key_name};
 use crate::render::{Job, Program, Renderer, Source};
 use crate::tuning::{SynthTuning, VelocityCurve};
 
@@ -49,6 +53,33 @@ struct Saved {
     lanes: Vec<Source>,
     level_match: bool,
     layers: Layers,
+    keyboard: KeyboardSettings,
+}
+
+/// How the on-screen keyboard plays.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+struct KeyboardSettings {
+    /// Use `velocity` instead of where the key is pressed.
+    fixed_velocity: bool,
+    velocity: u8,
+    /// Hold every note `length` seconds instead of while pressed.
+    fixed_length: bool,
+    length: f32,
+}
+
+impl Default for KeyboardSettings {
+    fn default() -> Self {
+        KeyboardSettings { fixed_velocity: false, velocity: 80, fixed_length: false, length: 2.0 }
+    }
+}
+
+/// A key being held.
+struct Press {
+    key: u8,
+    velocity: u8,
+    at: Instant,
+    from_midi: bool,
 }
 
 /// What the timeline shows.
@@ -75,6 +106,7 @@ impl Default for Saved {
             lanes: vec![Source::Sf2 { path: None, tuning: SynthTuning::default() }, Source::MacSampler { path: None }],
             level_match: true,
             layers: Layers::default(),
+            keyboard: KeyboardSettings::default(),
         }
     }
 }
@@ -145,6 +177,17 @@ pub struct StudioApp {
     loop_drag: Option<f64>,
     pending_render: Option<(u64, Instant)>,
     message: Option<String>,
+    keyboard: Keyboard,
+    keyboard_settings: KeyboardSettings,
+    pressed: Option<Press>,
+    last_note: Option<(u8, u8)>,
+    midi_sounding: Vec<u8>,
+    /// The SF2 and settings the live synthesizer was made for.
+    live_for: Option<(PathBuf, SynthTuning)>,
+    midi_in: MidiIn,
+    midi_ports: Vec<String>,
+    /// Show the whole program once the lanes have rendered it.
+    fit_view: bool,
 }
 
 impl StudioApp {
@@ -177,6 +220,15 @@ impl StudioApp {
             loop_drag: None,
             pending_render: None,
             message: None,
+            keyboard: Keyboard::default(),
+            keyboard_settings: saved.keyboard,
+            pressed: None,
+            last_note: None,
+            midi_sounding: Vec::new(),
+            live_for: None,
+            midi_in: MidiIn::new(),
+            midi_ports: Vec::new(),
+            fit_view: false,
         };
         for source in saved.lanes.into_iter().take(MAX_LANES) {
             app.add_lane(source);
@@ -254,6 +306,12 @@ impl StudioApp {
         }
         if changed {
             self.sync_player();
+            if self.fit_view && !self.lanes.iter().any(|l| l.rendering) {
+                self.fit_view = false;
+                self.view.start = 0.0;
+                self.view.span = self.duration().max(0.05);
+                self.view.follow = false;
+            }
         }
         if let Some((id, at)) = self.pending_render {
             if at.elapsed() >= RENDER_DELAY {
@@ -295,6 +353,10 @@ impl StudioApp {
                 .collect(),
         );
         transport.set_outputs(&heard);
+        let focus_gain = gains.get(self.focus).copied().unwrap_or(1.0);
+        if let Some(live) = &mut transport.live {
+            live.gain = focus_gain;
+        }
     }
 
     /// The lanes heard: the focused one when tuning, the checked ones when
@@ -535,13 +597,16 @@ impl StudioApp {
         let japanese = self.japanese;
         let current_pattern = match &self.program {
             Program::Pattern(p) => Some(*p),
-            Program::Midi(_) => None,
+            Program::Midi(_) | Program::Note { .. } => None,
         };
         egui::ComboBox::from_id_salt("pattern")
             .width(220.0)
             .selected_text(match &self.program {
                 Program::Pattern(p) => p.name(japanese).to_string(),
                 Program::Midi(path) => file_name(path),
+                Program::Note { key, velocity, length } => {
+                    format!("{} · vel {velocity} · {length:.2} s", key_name(*key))
+                }
             })
             .show_ui(ui, |ui| {
                 for pattern in TestPattern::ALL {
@@ -795,6 +860,186 @@ impl StudioApp {
         });
     }
 
+    // MARK: - Keyboard
+
+    /// Keeps the live synthesizer in step with the focused lane (Tune mode,
+    /// sf2synth lanes only).
+    fn ensure_live(&mut self) {
+        let wanted = match (self.mode, self.lanes.get(self.focus).map(|l| &l.source)) {
+            (Mode::Tune, Some(Source::Sf2 { path: Some(path), tuning })) => Some((path.clone(), tuning.clone())),
+            _ => None,
+        };
+        if wanted == self.live_for {
+            return;
+        }
+        self.live_for = wanted.clone();
+        let synth = wanted.and_then(|(path, tuning)| {
+            let font = self.renderer.font(&path).ok()?;
+            let mut synth = Synthesizer::new(font, &tuning.settings(self.sample_rate)).ok()?;
+            synth.control_change(0, 91, tuning.reverb_send);
+            synth.control_change(0, 93, tuning.chorus_send);
+            Some(synth)
+        });
+        let gain = self.gains().get(self.focus).copied().unwrap_or(1.0);
+        self.with_transport(|t| t.live = synth.map(|s| Live::new(s, gain)));
+    }
+
+    fn live_message(&self, message: &[u8]) {
+        self.with_transport(|t| {
+            if let Some(live) = &mut t.live {
+                live.synth.process_midi_message(message);
+            }
+        });
+    }
+
+    fn key_down(&mut self, key: u8, velocity: u8, from_midi: bool) {
+        if let Some(press) = self.pressed.take() {
+            if !from_midi {
+                self.live_message(&[0x80, press.key, 0]);
+            }
+            self.finish_note(press.key, press.velocity, press.at.elapsed().as_secs_f32());
+        }
+        // The lanes stop so the key is heard alone.
+        self.with_transport(|t| t.playing = false);
+        if !from_midi {
+            self.live_message(&[0x90, key, velocity]);
+        }
+        self.last_note = Some((key, velocity));
+        self.pressed = Some(Press { key, velocity, at: Instant::now(), from_midi });
+    }
+
+    fn key_up(&mut self, key: u8, from_midi: bool) {
+        let fixed = self.keyboard_settings.fixed_length && !from_midi;
+        if fixed || self.pressed.as_ref().is_none_or(|p| p.key != key) {
+            return;
+        }
+        let press = self.pressed.take().unwrap();
+        if !from_midi {
+            self.live_message(&[0x80, key, 0]);
+        }
+        self.finish_note(key, press.velocity, press.at.elapsed().as_secs_f32());
+    }
+
+    /// Releases a fixed-length note when its time is up.
+    fn tick_note(&mut self) {
+        let length = self.keyboard_settings.length;
+        let due = self.pressed.as_ref().is_some_and(|p| {
+            self.keyboard_settings.fixed_length && !p.from_midi && p.at.elapsed().as_secs_f32() >= length
+        });
+        if due {
+            let press = self.pressed.take().unwrap();
+            self.live_message(&[0x80, press.key, 0]);
+            self.finish_note(press.key, press.velocity, length);
+        }
+    }
+
+    /// Renders the note just played in every lane, to look at and compare.
+    fn finish_note(&mut self, key: u8, velocity: u8, length: f32) {
+        self.program = Program::Note { key, velocity, length: length.max(0.05) };
+        self.with_transport(|t| {
+            t.position = 0;
+            t.loop_range = None;
+        });
+        self.fit_view = true;
+        self.render_all();
+    }
+
+    fn poll_midi(&mut self) {
+        let messages: Vec<Vec<u8>> = self.midi_in.receiver.try_iter().collect();
+        for message in messages {
+            let (status, key, velocity) =
+                (message[0] & 0xf0, message.get(1).copied().unwrap_or(0), message.get(2).copied().unwrap_or(0));
+            match status {
+                0x90 if velocity > 0 => {
+                    self.midi_sounding.push(key);
+                    if self.mode == Mode::Tune {
+                        self.key_down(key, velocity, true);
+                    }
+                }
+                0x80 | 0x90 => {
+                    self.midi_sounding.retain(|&k| k != key);
+                    if self.mode == Mode::Tune {
+                        self.key_up(key, true);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn keyboard_ui(&mut self, ui: &mut egui::Ui) {
+        let japanese = self.japanese;
+        let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
+        let live = self.live_for.is_some();
+        ui.horizontal(|ui| {
+            let settings = &mut self.keyboard_settings;
+            ui.checkbox(&mut settings.fixed_velocity, t("Fixed velocity", "強さを固定"));
+            ui.add_enabled(settings.fixed_velocity, egui::Slider::new(&mut settings.velocity, 1..=127));
+            ui.separator();
+            ui.checkbox(&mut settings.fixed_length, t("Fixed length", "長さを固定"));
+            ui.add_enabled(
+                settings.fixed_length,
+                egui::Slider::new(&mut settings.length, 0.1..=10.0).suffix(" s").logarithmic(true),
+            );
+            ui.separator();
+            let connected = self.midi_in.connected().map(str::to_string);
+            let label = connected.clone().unwrap_or_else(|| t("No MIDI keyboard", "MIDI キーボードなし").to_string());
+            let mut choice: Option<Option<String>> = None;
+            let combo = egui::ComboBox::from_id_salt("midi").width(200.0).selected_text(label).show_ui(ui, |ui| {
+                if ui.selectable_label(connected.is_none(), t("None", "なし")).clicked() {
+                    choice = Some(None);
+                }
+                for port in &self.midi_ports {
+                    if ui.selectable_label(connected.as_deref() == Some(port), port).clicked() {
+                        choice = Some(Some(port.clone()));
+                    }
+                }
+            });
+            if combo.response.clicked() {
+                self.midi_ports = MidiIn::ports();
+            }
+            match choice {
+                Some(None) => self.midi_in.disconnect(),
+                Some(Some(port)) => {
+                    if let Some(player) = &self.player {
+                        let ctx = ui.ctx().clone();
+                        if let Err(e) =
+                            self.midi_in.connect(&port, Arc::clone(&player.transport), move || ctx.request_repaint())
+                        {
+                            self.message = Some(e);
+                        }
+                    }
+                }
+                None => {}
+            }
+            ui.separator();
+            if !live {
+                ui.colored_label(
+                    Color32::from_rgb(240, 190, 90),
+                    t(
+                        "Focus an sf2synth lane with an SF2 to play the keys.",
+                        "鍵盤を鳴らすには、SF2 を選んだ sf2synth のレーンを調整対象にしてください。",
+                    ),
+                );
+            } else {
+                ui.weak(t(
+                    "Press higher on a key for soft, lower for loud. Release to see the note in every lane.",
+                    "鍵盤の上の方ほど弱く、下の方ほど強く鳴ります。離すとその音を全レーンで表示します。",
+                ));
+            }
+        });
+        ui.add_space(4.0);
+        let fixed = self.keyboard_settings.fixed_velocity.then_some(self.keyboard_settings.velocity);
+        let accent = LANE_COLORS[self.focus.min(MAX_LANES - 1)];
+        let events = self.keyboard.show(ui, fixed, &self.midi_sounding, self.last_note, accent);
+        for event in events {
+            match event {
+                KeyEvent::On { key, velocity } => self.key_down(key, velocity, false),
+                KeyEvent::Off { key } => self.key_up(key, false),
+            }
+        }
+    }
+
     // MARK: - Timeline
 
     /// Toggles for what the timeline shows.
@@ -878,6 +1123,28 @@ impl StudioApp {
                 Vec2::new(lanes_rect.width(), lane_height - 2.0),
             );
             self.draw_lane(ui.ctx(), &painter, i, lane_rect, heard[i], to_db(gain) - lowest);
+        }
+
+        // The keyboard note: a band as long as it was held, as strong as
+        // its velocity.
+        if let Program::Note { key, velocity, length } = self.program {
+            let (x0, x1) = (to_x(NOTE_START), to_x(NOTE_START + length as f64));
+            let alpha = (40.0 + velocity as f32 / 127.0 * 160.0) as u8;
+            let band = Rect::from_x_y_ranges(x0..=x1.max(x0 + 2.0), rect.top() + 2.0..=rect.top() + ruler_height - 2.0);
+            painter.rect_filled(band, 2.0, Color32::from_rgba_unmultiplied(255, 200, 60, alpha));
+            painter.text(
+                band.left_center() + Vec2::new(4.0, 0.0),
+                Align2::LEFT_CENTER,
+                format!("{} · vel {velocity} · {length:.2} s", key_name(key)),
+                FontId::proportional(11.0),
+                Color32::BLACK,
+            );
+            for x in [x0, x1] {
+                painter.line_segment(
+                    [Pos2::new(x, lanes_rect.top()), Pos2::new(x, lanes_rect.bottom())],
+                    Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 200, 60, 120)),
+                );
+            }
         }
 
         // Loop and playhead.
@@ -1031,6 +1298,33 @@ impl StudioApp {
             painter.image(texture.id(), Rect::from_x_y_ranges(x0..=x1, body.y_range()), uv, Color32::WHITE);
         }
 
+        // The note's fundamental and harmonics.
+        if let (true, Program::Note { key, .. }) = (layers.spectrogram, &self.program) {
+            let fundamental = key_hz(*key);
+            let span = (SPECTRUM_HIGH_HZ / SPECTRUM_LOW_HZ).ln();
+            for n in 1..=16 {
+                let f = fundamental * n as f32;
+                if !(SPECTRUM_LOW_HZ..SPECTRUM_HIGH_HZ).contains(&f) {
+                    continue;
+                }
+                let y = body.bottom() - (f / SPECTRUM_LOW_HZ).ln() / span * body.height();
+                let alpha = if n == 1 { 110 } else { 45 };
+                painter.line_segment(
+                    [Pos2::new(body.left(), y), Pos2::new(body.right() - 30.0, y)],
+                    Stroke::new(1.0, Color32::from_rgba_unmultiplied(120, 255, 200, alpha)),
+                );
+                if n <= 8 {
+                    painter.text(
+                        Pos2::new(body.left() + 3.0, y),
+                        Align2::LEFT_BOTTOM,
+                        if n == 1 { format!("{:.0} Hz", f) } else { format!("×{n}") },
+                        FontId::monospace(9.0),
+                        Color32::from_rgba_unmultiplied(120, 255, 200, 160),
+                    );
+                }
+            }
+        }
+
         if !layers.envelope {
             return;
         }
@@ -1122,6 +1416,9 @@ impl StudioApp {
 impl eframe::App for StudioApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_renders();
+        self.ensure_live();
+        self.poll_midi();
+        self.tick_note();
         self.handle_keys(ui.ctx());
         egui::Panel::top("top").show(ui, |ui| {
             ui.add_space(4.0);
@@ -1133,6 +1430,12 @@ impl eframe::App for StudioApp {
             self.transport_bar(ui);
             ui.add_space(4.0);
         });
+        if self.mode == Mode::Tune {
+            egui::Panel::bottom("keyboard").resizable(true).default_size(210.0).min_size(120.0).show(ui, |ui| {
+                ui.add_space(4.0);
+                self.keyboard_ui(ui);
+            });
+        }
         if self.mode != Mode::Create {
             egui::Panel::left("lanes").resizable(true).default_size(280.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -1151,7 +1454,11 @@ impl eframe::App for StudioApp {
             Mode::Create => self.create_ui(ui),
             Mode::Tune | Mode::Compare => self.timeline(ui),
         });
-        if self.is_playing() || self.pending_render.is_some() || self.lanes.iter().any(|l| l.rendering) {
+        if self.is_playing()
+            || self.pending_render.is_some()
+            || self.pressed.is_some()
+            || self.lanes.iter().any(|l| l.rendering)
+        {
             ui.ctx().request_repaint();
         }
     }
@@ -1164,6 +1471,7 @@ impl eframe::App for StudioApp {
             lanes: self.lanes.iter().map(|l| l.source.clone()).collect(),
             level_match: self.level_match,
             layers: self.layers,
+            keyboard: self.keyboard_settings,
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
     }

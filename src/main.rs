@@ -5,7 +5,9 @@
 mod analysis;
 mod app;
 mod audio;
+mod keyboard;
 mod mac_sampler;
+mod midi_in;
 mod patterns;
 mod render;
 mod tuning;

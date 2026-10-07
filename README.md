@@ -6,7 +6,7 @@ Windows built on [sf2synth](https://github.com/albos-inc/sf2synth).
 | Mode | What it does |
 |---|---|
 | **Create** | *(in progress)* Build a new SF2 from an existing SF2, recordings or synthesis: brightness, hardness, sustain, velocity layers, tuning. |
-| **Tune** | Play a song or a test pattern with sf2synth and an SF2, watch its spectrogram and levels, and adjust the synthesizer as you listen. You hear the lane you focus; save the settings as TOML. |
+| **Tune** | Play the 88-key keyboard (or a MIDI keyboard) with sf2synth and an SF2: a key sounds at once, and when you release it the note is rendered in every lane with its spectrogram, harmonics and level. Press high on a key for soft, low for loud, or fix the velocity and length. Adjust the synthesizer as you listen, play a song or a test pattern, and save the settings as TOML. |
 | **Compare** | Put up to nine lanes side by side — sf2synth with any SF2, the macOS sampler, or a WAV recording. Every lane is heard by default; turn each one's output on and off while playing (sample-aligned, level-matched, click-free), or solo one. |
 
 Every lane shows a spectrogram, its level in dB and a close-up of the
