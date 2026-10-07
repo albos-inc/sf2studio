@@ -48,6 +48,22 @@ struct Saved {
     program: Program,
     lanes: Vec<Source>,
     level_match: bool,
+    layers: Layers,
+}
+
+/// What the timeline shows.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+struct Layers {
+    spectrogram: bool,
+    envelope: bool,
+    closeup: bool,
+}
+
+impl Default for Layers {
+    fn default() -> Self {
+        Layers { spectrogram: true, envelope: true, closeup: true }
+    }
 }
 
 impl Default for Saved {
@@ -58,6 +74,7 @@ impl Default for Saved {
             program: Program::Pattern(TestPattern::VelocitySweep),
             lanes: vec![Source::Sf2 { path: None, tuning: SynthTuning::default() }, Source::MacSampler { path: None }],
             level_match: true,
+            layers: Layers::default(),
         }
     }
 }
@@ -119,6 +136,11 @@ pub struct StudioApp {
     lanes: Vec<Lane>,
     next_id: u64,
     level_match: bool,
+    /// The lane tuned (and heard, when tuning).
+    focus: usize,
+    /// Lanes heard when comparing.
+    outputs: Vec<bool>,
+    layers: Layers,
     view: View,
     loop_drag: Option<f64>,
     pending_render: Option<(u64, Instant)>,
@@ -148,6 +170,9 @@ impl StudioApp {
             lanes: Vec::new(),
             next_id: 0,
             level_match: saved.level_match,
+            focus: 0,
+            outputs: Vec::new(),
+            layers: saved.layers,
             view: View { start: 0.0, span: 30.0, follow: true, zoom_ms: 20.0 },
             loop_drag: None,
             pending_render: None,
@@ -170,6 +195,7 @@ impl StudioApp {
         let id = self.next_id;
         self.next_id += 1;
         self.lanes.push(Lane::new(id, source));
+        self.outputs.push(true);
         let index = self.lanes.len() - 1;
         self.render_lane(index);
     }
@@ -258,17 +284,31 @@ impl StudioApp {
 
     fn sync_player(&mut self) {
         let gains = self.gains();
+        let heard = self.heard();
         let Some(player) = &self.player else { return };
         let mut transport = player.transport.lock().unwrap();
-        transport.lanes = self
-            .lanes
-            .iter()
-            .zip(&gains)
-            .map(|(l, &gain)| l.audio.as_ref().map(|audio| LaneAudio { audio: Arc::clone(audio), gain }))
-            .collect();
-        if transport.current >= self.lanes.len() {
-            transport.current = 0;
+        transport.set_lanes(
+            self.lanes
+                .iter()
+                .zip(&gains)
+                .map(|(l, &gain)| l.audio.as_ref().map(|audio| LaneAudio { audio: Arc::clone(audio), gain }))
+                .collect(),
+        );
+        transport.set_outputs(&heard);
+    }
+
+    /// The lanes heard: the focused one when tuning, the checked ones when
+    /// comparing.
+    fn heard(&self) -> Vec<bool> {
+        match self.mode {
+            Mode::Compare => self.outputs.clone(),
+            _ => (0..self.lanes.len()).map(|i| i == self.focus).collect(),
         }
+    }
+
+    fn push_outputs(&self) {
+        let heard = self.heard();
+        self.with_transport(|t| t.set_outputs(&heard));
     }
 
     // MARK: - Transport
@@ -279,10 +319,6 @@ impl StudioApp {
 
     fn position_seconds(&self) -> f64 {
         self.with_transport(|t| t.position).unwrap_or(0) as f64 / self.sample_rate as f64
-    }
-
-    fn current_lane(&self) -> usize {
-        self.with_transport(|t| t.current).unwrap_or(0)
     }
 
     fn is_playing(&self) -> bool {
@@ -302,9 +338,35 @@ impl StudioApp {
         });
     }
 
-    fn select_lane(&self, lane: usize) {
+    /// Focuses a lane (and, when tuning, hears only it).
+    fn focus_lane(&mut self, lane: usize) {
         if lane < self.lanes.len() {
-            self.with_transport(|t| t.select(lane));
+            self.focus = lane;
+            self.push_outputs();
+        }
+    }
+
+    /// Turns a lane's output on or off (comparing).
+    fn toggle_output(&mut self, lane: usize) {
+        if let Some(on) = self.outputs.get_mut(lane) {
+            *on = !*on;
+            self.push_outputs();
+        }
+    }
+
+    /// Hears only `lane` (comparing).
+    fn solo(&mut self, lane: usize) {
+        if lane < self.lanes.len() {
+            self.outputs = (0..self.lanes.len()).map(|i| i == lane).collect();
+            self.focus = lane;
+            self.push_outputs();
+        }
+    }
+
+    fn set_mode(&mut self, mode: Mode) {
+        if self.mode != mode {
+            self.mode = mode;
+            self.push_outputs();
         }
     }
 
@@ -317,7 +379,7 @@ impl StudioApp {
             return;
         }
         let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
-        let (space, tab, home, left, right, clear_loop, pressed) = ctx.input(|i| {
+        let (space, tab, home, left, right, clear_loop, pressed, shift) = ctx.input(|i| {
             (
                 i.key_pressed(Key::Space),
                 i.key_pressed(Key::Tab),
@@ -326,18 +388,26 @@ impl StudioApp {
                 i.key_pressed(Key::ArrowRight),
                 i.key_pressed(Key::L),
                 keys.iter().position(|&k| i.key_pressed(k)),
+                i.modifiers.shift,
             )
         });
         if space {
             self.toggle_play();
         }
         if let Some(lane) = pressed {
-            self.select_lane(lane);
+            match (self.mode, shift) {
+                (Mode::Compare, false) => self.toggle_output(lane),
+                (Mode::Compare, true) => self.solo(lane),
+                _ => self.focus_lane(lane),
+            }
         }
         if tab {
             // A ⇄ B, or the next lane when there are more.
-            let next = (self.current_lane() + 1) % self.lanes.len().max(1);
-            self.select_lane(next);
+            let next = (self.focus + 1) % self.lanes.len().max(1);
+            match self.mode {
+                Mode::Compare => self.solo(next),
+                _ => self.focus_lane(next),
+            }
         }
         if home {
             self.seek(0.0);
@@ -363,7 +433,7 @@ impl StudioApp {
                 let label = egui::RichText::new(if self.japanese { japanese } else { english }).size(15.0);
                 if ui.add(egui::Button::selectable(self.mode == mode, label).min_size(Vec2::new(96.0, 28.0))).clicked()
                 {
-                    self.mode = mode;
+                    self.set_mode(mode);
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -384,7 +454,6 @@ impl StudioApp {
         let playing = self.is_playing();
         let position = self.position_seconds();
         let duration = self.duration();
-        let current = self.current_lane();
         ui.horizontal(|ui| {
             let play = if playing { self.t("⏸ Pause", "⏸ 一時停止") } else { self.t("▶ Play", "▶ 再生") };
             if ui.add(egui::Button::new(play).min_size(Vec2::new(96.0, 28.0))).clicked() {
@@ -395,15 +464,39 @@ impl StudioApp {
             }
             ui.monospace(format!("{} / {}", clock(position), clock(duration)));
             ui.separator();
-            ui.label(self.t("Hear:", "再生中:"));
-            for (i, &color) in LANE_COLORS.iter().enumerate().take(self.lanes.len()) {
-                let label = egui::RichText::new(format!(" {} ", lane_letter(i))).color(color).strong().size(16.0);
-                let button = ui.add(egui::Button::selectable(current == i, label));
-                if button
-                    .on_hover_text(format!("{} ({})", self.t("Switch to this lane", "このレーンに切り替え"), i + 1))
-                    .clicked()
-                {
-                    self.select_lane(i);
+            if self.mode == Mode::Compare {
+                ui.label(self.t("Output:", "出力:"));
+                for (i, &color) in LANE_COLORS.iter().enumerate().take(self.lanes.len()) {
+                    let mut on = self.outputs[i];
+                    let label = egui::RichText::new(lane_letter(i).to_string()).color(color).strong().size(16.0);
+                    let hint = self.t(
+                        "Hear this lane (1–9) · Shift-click or Shift+1–9: only this lane",
+                        "このレーンを鳴らす（1–9）· Shift+クリック / Shift+1–9: このレーンだけ",
+                    );
+                    let response = ui.checkbox(&mut on, label).on_hover_text(hint);
+                    if response.changed() {
+                        if ui.input(|i| i.modifiers.shift) {
+                            self.solo(i);
+                        } else {
+                            self.toggle_output(i);
+                        }
+                    }
+                }
+                if ui.small_button(self.t("All", "全部")).clicked() {
+                    self.outputs = vec![true; self.lanes.len()];
+                    self.push_outputs();
+                }
+            } else {
+                ui.label(self.t("Hear:", "再生中:"));
+                for (i, &color) in LANE_COLORS.iter().enumerate().take(self.lanes.len()) {
+                    let label = egui::RichText::new(format!(" {} ", lane_letter(i))).color(color).strong().size(16.0);
+                    let button = ui.add(egui::Button::selectable(self.focus == i, label));
+                    if button
+                        .on_hover_text(format!("{} ({})", self.t("Switch to this lane", "このレーンに切り替え"), i + 1))
+                        .clicked()
+                    {
+                        self.focus_lane(i);
+                    }
                 }
             }
             ui.separator();
@@ -577,6 +670,10 @@ impl StudioApp {
         if let Some(i) = remove {
             if self.lanes.len() > 1 {
                 self.lanes.remove(i);
+                self.outputs.remove(i);
+                if self.focus >= self.lanes.len() || self.focus > i {
+                    self.focus = self.focus.saturating_sub(1);
+                }
                 self.sync_player();
             }
         }
@@ -594,7 +691,7 @@ impl StudioApp {
     }
 
     fn tuning_ui(&mut self, ui: &mut egui::Ui) {
-        let current = self.current_lane();
+        let current = self.focus;
         let japanese = self.japanese;
         ui.strong(self.t("sf2synth settings", "sf2synth の設定"));
         let Some(lane) = self.lanes.get_mut(current) else { return };
@@ -700,11 +797,22 @@ impl StudioApp {
 
     // MARK: - Timeline
 
+    /// Toggles for what the timeline shows.
+    fn layers_bar(&mut self, ui: &mut egui::Ui) {
+        let japanese = self.japanese;
+        ui.horizontal(|ui| {
+            ui.label(if japanese { "表示:" } else { "Show:" });
+            ui.toggle_value(&mut self.layers.spectrogram, if japanese { "スペクトログラム" } else { "Spectrogram" });
+            ui.toggle_value(&mut self.layers.envelope, if japanese { "音量推移 (dB)" } else { "Level (dB)" });
+            ui.toggle_value(&mut self.layers.closeup, if japanese { "拡大波形" } else { "Waveform close-up" });
+        });
+    }
+
     fn timeline(&mut self, ui: &mut egui::Ui) {
         let duration = self.duration();
         let position = self.position_seconds();
         let playing = self.is_playing();
-        let current = self.current_lane();
+        let heard = self.heard();
         if duration <= 0.0 {
             ui.centered_and_justified(|ui| {
                 ui.label(self.t(
@@ -723,13 +831,14 @@ impl StudioApp {
         }
         self.view.start = self.view.start.clamp(0.0, (duration - self.view.span).max(0.0));
 
+        self.layers_bar(ui);
         let available = ui.available_size();
         let (rect, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, Color32::from_gray(18));
 
         let ruler_height = 20.0;
-        let closeup_height = (rect.height() * 0.22).clamp(80.0, 180.0);
+        let closeup_height = if self.layers.closeup { (rect.height() * 0.22).clamp(80.0, 180.0) } else { 0.0 };
         let lanes_rect = Rect::from_min_max(
             Pos2::new(rect.left(), rect.top() + ruler_height),
             Pos2::new(rect.right(), rect.bottom() - closeup_height - 6.0),
@@ -768,7 +877,7 @@ impl StudioApp {
                 Pos2::new(lanes_rect.left(), lanes_rect.top() + lane_height * i as f32),
                 Vec2::new(lanes_rect.width(), lane_height - 2.0),
             );
-            self.draw_lane(ui.ctx(), &painter, i, lane_rect, i == current, to_db(gain) - lowest);
+            self.draw_lane(ui.ctx(), &painter, i, lane_rect, heard[i], to_db(gain) - lowest);
         }
 
         // Loop and playhead.
@@ -785,7 +894,9 @@ impl StudioApp {
 
         // Close-up of the waveforms at the playhead.
         let closeup = Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - closeup_height), rect.right_bottom());
-        self.draw_closeup(&painter, closeup, position, current);
+        if self.layers.closeup {
+            self.draw_closeup(&painter, closeup, position, &heard);
+        }
 
         // Interaction.
         let shift = ui.input(|i| i.modifiers.shift);
@@ -803,11 +914,11 @@ impl StudioApp {
                     }
                 } else if response.clicked() || response.dragged() {
                     self.seek(t);
-                    // Clicking a lane's header selects it.
+                    // Clicking a lane's header focuses it.
                     let lane = ((pointer.y - lanes_rect.top()) / lane_height) as usize;
                     let in_header = (pointer.y - lanes_rect.top()) % lane_height < 20.0;
                     if response.clicked() && in_header && lane < self.lanes.len() {
-                        self.select_lane(lane);
+                        self.focus_lane(lane);
                     }
                 }
             }
@@ -858,13 +969,15 @@ impl StudioApp {
         painter: &egui::Painter,
         index: usize,
         rect: Rect,
-        selected: bool,
+        heard: bool,
         gain_db: f32,
     ) {
         let color = LANE_COLORS[index];
+        let focused = index == self.focus;
+        let layers = self.layers;
         let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 18.0));
         let body = Rect::from_min_max(Pos2::new(rect.left(), header.bottom()), rect.max);
-        painter.rect_filled(header, 0.0, if selected { color.gamma_multiply(0.35) } else { Color32::from_gray(30) });
+        painter.rect_filled(header, 0.0, if heard { color.gamma_multiply(0.35) } else { Color32::from_gray(30) });
         let lane = &mut self.lanes[index];
         let source = match &lane.source {
             Source::Sf2 { .. } => "sf2synth",
@@ -878,13 +991,14 @@ impl StudioApp {
             Source::Wav { .. } => "WAV",
         };
         let name = lane.source.path().map(file_name).unwrap_or_default();
-        let marker = if selected { "▶" } else { " " };
+        let speaker = if heard { "🔊" } else { "🔈" };
+        let marker = if focused { "▶" } else { " " };
         painter.text(
             header.left_center() + Vec2::new(6.0, 0.0),
             Align2::LEFT_CENTER,
-            format!("{marker} {}  {source} · {name}", lane_letter(index)),
+            format!("{marker} {}  {speaker}  {source} · {name}", lane_letter(index)),
             FontId::proportional(13.0),
-            if selected { Color32::WHITE } else { color },
+            if heard { Color32::WHITE } else { color },
         );
 
         let (Some(audio), Some(analysis)) = (&lane.audio, &lane.analysis) else {
@@ -900,14 +1014,14 @@ impl StudioApp {
         };
 
         // Spectrogram.
-        if lane.texture.as_ref().is_none_or(|(_, made_for)| (made_for - gain_db).abs() > 0.05) {
+        if layers.spectrogram && lane.texture.as_ref().is_none_or(|(_, made_for)| (made_for - gain_db).abs() > 0.05) {
             lane.texture = Some((spectrogram_texture(ctx, lane.id, analysis, gain_db), gain_db));
         }
         let texture = &lane.texture.as_ref().unwrap().0;
         let lane_duration = audio.duration();
         let view_end = self.view.start + self.view.span;
         let visible_end = view_end.min(lane_duration);
-        if visible_end > self.view.start {
+        if layers.spectrogram && visible_end > self.view.start {
             let x0 = body.left();
             let x1 = body.left() + ((visible_end - self.view.start) / self.view.span) as f32 * body.width();
             let uv = Rect::from_min_max(
@@ -917,6 +1031,9 @@ impl StudioApp {
             painter.image(texture.id(), Rect::from_x_y_ranges(x0..=x1, body.y_range()), uv, Color32::WHITE);
         }
 
+        if !layers.envelope {
+            return;
+        }
         // Level envelope (dB) on top.
         let mut points = Vec::with_capacity(body.width() as usize);
         let rate = audio.sample_rate;
@@ -946,7 +1063,7 @@ impl StudioApp {
         }
     }
 
-    fn draw_closeup(&self, painter: &egui::Painter, rect: Rect, position: f64, current: usize) {
+    fn draw_closeup(&self, painter: &egui::Painter, rect: Rect, position: f64, heard: &[bool]) {
         painter.rect_filled(rect, 0.0, Color32::from_gray(12));
         let mid = rect.center().y;
         painter.line_segment(
@@ -955,8 +1072,9 @@ impl StudioApp {
         );
         let half = self.view.zoom_ms as f64 / 1000.0;
         let gains = self.gains();
-        let mut order: Vec<usize> = (0..self.lanes.len()).filter(|&i| i != current).collect();
-        order.push(current);
+        // Lanes not heard first, faint; the heard ones on top.
+        let mut order: Vec<usize> = (0..self.lanes.len()).filter(|&i| !heard[i]).collect();
+        order.extend((0..self.lanes.len()).filter(|&i| heard[i]));
         let width = rect.width().max(1.0) as usize;
         for i in order {
             let Some(audio) = &self.lanes[i].audio else { continue };
@@ -976,7 +1094,7 @@ impl StudioApp {
                     mid - value.clamp(-1.0, 1.0) * rect.height() * 0.48 * 2.0,
                 ));
             }
-            let stroke = if i == current {
+            let stroke = if heard[i] {
                 Stroke::new(1.6, LANE_COLORS[i])
             } else {
                 Stroke::new(1.0, LANE_COLORS[i].gamma_multiply(0.5))
@@ -1045,6 +1163,7 @@ impl eframe::App for StudioApp {
             program: self.program.clone(),
             lanes: self.lanes.iter().map(|l| l.source.clone()).collect(),
             level_match: self.level_match,
+            layers: self.layers,
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
     }

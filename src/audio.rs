@@ -1,4 +1,4 @@
-//! Playing the rendered lanes, switching between them without a click.
+//! Playing the rendered lanes, turning each on and off without a click.
 
 use std::sync::{Arc, Mutex};
 
@@ -7,8 +7,8 @@ use cpal::{FromSample, SampleFormat, SizedSample};
 
 use crate::analysis::Rendered;
 
-/// Frames a lane switch crossfades over (about 10 ms).
-const FADE_FRAMES: u32 = 480;
+/// Frames a lane fades in or out over when turned on or off (about 10 ms).
+const FADE_FRAMES: f32 = 480.0;
 
 pub struct LaneAudio {
     pub audio: Arc<Rendered>,
@@ -18,14 +18,15 @@ pub struct LaneAudio {
 
 #[derive(Default)]
 pub struct Transport {
-    pub lanes: Vec<Option<LaneAudio>>,
+    lanes: Vec<Option<LaneAudio>>,
+    /// Which lanes are heard.
+    outputs: Vec<bool>,
+    /// Each lane's fade level, moving towards 1 (heard) or 0.
+    levels: Vec<f32>,
+    length: usize,
     pub playing: bool,
     /// Frame being played.
     pub position: usize,
-    /// Lane heard.
-    pub current: usize,
-    previous: usize,
-    fade: u32,
     /// Frames played in a loop, if any.
     pub loop_range: Option<(usize, usize)>,
     /// Output level of the last buffer (peak), for the meter.
@@ -33,45 +34,67 @@ pub struct Transport {
 }
 
 impl Transport {
-    pub fn select(&mut self, lane: usize) {
-        if lane != self.current {
-            self.previous = self.current;
-            self.current = lane;
-            self.fade = FADE_FRAMES;
+    pub fn set_lanes(&mut self, lanes: Vec<Option<LaneAudio>>) {
+        self.length = lanes.iter().flatten().map(|l| l.audio.frames()).max().unwrap_or(0);
+        self.levels.resize(lanes.len(), 0.0);
+        self.outputs.resize(lanes.len(), false);
+        self.lanes = lanes;
+        if self.position >= self.length {
+            self.position = 0;
+            self.playing = false;
+        }
+    }
+
+    /// Sets which lanes are heard (they fade in and out).
+    pub fn set_outputs(&mut self, outputs: &[bool]) {
+        self.outputs.clear();
+        self.outputs.extend_from_slice(outputs);
+        self.outputs.resize(self.lanes.len(), false);
+        self.levels.resize(self.lanes.len(), 0.0);
+        if !self.playing {
+            // Nothing to fade while stopped.
+            for (level, &on) in self.levels.iter_mut().zip(&self.outputs) {
+                *level = if on { 1.0 } else { 0.0 };
+            }
         }
     }
 
     /// Frames of the longest lane.
     pub fn length(&self) -> usize {
-        self.lanes.iter().flatten().map(|l| l.audio.frames()).max().unwrap_or(0)
-    }
-
-    fn frame(&self, lane: usize, position: usize) -> (f32, f32) {
-        match self.lanes.get(lane).and_then(|l| l.as_ref()) {
-            Some(l) if position < l.audio.frames() => {
-                (l.audio.left[position] * l.gain, l.audio.right[position] * l.gain)
-            }
-            _ => (0.0, 0.0),
-        }
+        self.length
     }
 
     fn next(&mut self) -> (f32, f32) {
         if !self.playing {
             return (0.0, 0.0);
         }
-        let (mut left, mut right) = self.frame(self.current, self.position);
-        if self.fade > 0 {
-            let w = self.fade as f32 / FADE_FRAMES as f32;
-            let (pl, pr) = self.frame(self.previous, self.position);
-            left = left * (1.0 - w) + pl * w;
-            right = right * (1.0 - w) + pr * w;
-            self.fade -= 1;
+        let (mut left, mut right) = (0.0, 0.0);
+        let position = self.position;
+        for (i, lane) in self.lanes.iter().enumerate() {
+            let target = if self.outputs[i] { 1.0 } else { 0.0 };
+            let level = &mut self.levels[i];
+            if *level != target {
+                *level = if target > *level {
+                    (*level + 1.0 / FADE_FRAMES).min(1.0)
+                } else {
+                    (*level - 1.0 / FADE_FRAMES).max(0.0)
+                };
+            }
+            if *level > 0.0 {
+                if let Some(lane) = lane {
+                    if position < lane.audio.frames() {
+                        let g = lane.gain * *level;
+                        left += lane.audio.left[position] * g;
+                        right += lane.audio.right[position] * g;
+                    }
+                }
+            }
         }
         self.position += 1;
         match self.loop_range {
             Some((start, end)) if self.position >= end && end > start => self.position = start,
             _ => {
-                if self.position >= self.length() {
+                if self.position >= self.length {
                     self.playing = false;
                     self.position = 0;
                 }

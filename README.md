@@ -6,19 +6,20 @@ Windows built on [sf2synth](https://github.com/albos-inc/sf2synth).
 | Mode | What it does |
 |---|---|
 | **Create** | *(in progress)* Build a new SF2 from an existing SF2, recordings or synthesis: brightness, hardness, sustain, velocity layers, tuning. |
-| **Tune** | Play a song or a test pattern with sf2synth and an SF2, watch its spectrogram and levels, and adjust the synthesizer as you listen. Save the settings as TOML. |
-| **Compare** | Put up to nine lanes side by side — sf2synth with any SF2, the macOS sampler, or a WAV recording — and switch between them while playing, sample-aligned and level-matched. |
+| **Tune** | Play a song or a test pattern with sf2synth and an SF2, watch its spectrogram and levels, and adjust the synthesizer as you listen. You hear the lane you focus; save the settings as TOML. |
+| **Compare** | Put up to nine lanes side by side — sf2synth with any SF2, the macOS sampler, or a WAV recording. Every lane is heard by default; turn each one's output on and off while playing (sample-aligned, level-matched, click-free), or solo one. |
 
 Every lane shows a spectrogram, its level in dB and a close-up of the
-waveform at the playhead.
+waveform at the playhead; each view can be turned on and off.
 
 ## Keys
 
 | Key | |
 |---|---|
 | Space | Play / pause |
-| 1–9 | Hear lane 1–9 |
-| Tab | Hear the next lane (A ⇄ B) |
+| 1–9 | Tune: hear lane 1–9 · Compare: turn lane 1–9's output on/off |
+| Shift+1–9 | Compare: hear only lane 1–9 |
+| Tab | Hear the next lane alone (A ⇄ B) |
 | ← / → | Back / forward 5 s |
 | Home | To the start |
 | Shift-drag | Loop a range |
