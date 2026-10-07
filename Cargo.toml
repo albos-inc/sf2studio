@@ -1,0 +1,29 @@
+[package]
+name = "sf2studio"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Make, tune and compare SF2 instruments: an SF2 generator, a tuning player and an A/B comparison tool built on sf2synth."
+license = "MIT OR Apache-2.0"
+authors = ["Albos Inc."]
+repository = "https://github.com/albos-inc/sf2studio"
+readme = "README.md"
+keywords = ["sf2", "synthesizer", "midi", "audio", "piano"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+cpal = "0.18.2"
+eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+hound = "3.5.1"
+midir = "0.11.0"
+realfft = "3.5.0"
+rfd = "0.17.2"
+serde = { version = "1.0.229", features = ["derive"] }
+sf2synth = { git = "https://github.com/albos-inc/sf2synth", branch = "main" }
+toml = "1.1.6"
+
+[profile.release]
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 2
