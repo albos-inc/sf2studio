@@ -670,10 +670,16 @@ impl StudioApp {
                 filled.set_width(rect.width() * level);
                 let color = if meter > 0.99 { Color32::RED } else { Color32::from_rgb(90, 200, 120) };
                 ui.painter().rect_filled(filled, 2.0, color);
-                ui.weak(self.t(
+                // The key hint only when it fits; Help lists the keys too.
+                let hint = self.t(
                     "Space play · 1–9 / Tab switch lane · Shift-drag loop · L clear loop",
                     "Space 再生 · 1–9 / Tab レーン切替 · Shift+ドラッグ ループ · L ループ解除",
-                ));
+                );
+                let width =
+                    ui.painter().layout_no_wrap(hint.to_string(), FontId::proportional(13.5), Color32::WHITE).size().x;
+                if ui.available_width() > width + 16.0 {
+                    ui.weak(hint);
+                }
             });
         });
     }
@@ -1735,10 +1741,15 @@ impl StudioApp {
         let name = match &effective {
             Source::Synth { sound, .. } => {
                 let file = match &sound.file {
-                    SoundFile::MacBuiltIn => "GS (built-in)".to_string(),
-                    file => file.path().as_deref().map(file_name).unwrap_or_default(),
+                    SoundFile::MacBuiltIn => Some("GS (built-in)".to_string()),
+                    file => file.path().as_deref().map(file_name),
                 };
-                format!("{file} · {}:{}", sound.bank, sound.program)
+                match file {
+                    Some(file) => format!("{file} · {}:{}", sound.bank, sound.program),
+                    None => {
+                        (if self.japanese { "音源を選んでください" } else { "choose an instrument file" }).to_string()
+                    }
+                }
             }
             Source::Wav { path } => path.as_deref().map(file_name).unwrap_or_default(),
         };
