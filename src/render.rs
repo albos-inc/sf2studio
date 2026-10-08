@@ -29,6 +29,9 @@ pub enum SoundFile {
     File(PathBuf),
     /// macOS's built-in General MIDI set (Roland GS, DLS).
     MacBuiltIn,
+    /// Windows's built-in General MIDI set (gm.dls, Roland GS), the
+    /// instruments of the Microsoft GS Wavetable Synth.
+    WindowsBuiltIn,
 }
 
 /// macOS's built-in General MIDI instruments.
@@ -42,8 +45,15 @@ impl SoundFile {
             SoundFile::SameAsA => None,
             SoundFile::File(path) => Some(path.clone()),
             SoundFile::MacBuiltIn => Some(PathBuf::from(MAC_BUILT_IN_DLS)),
+            SoundFile::WindowsBuiltIn => Some(windows_gm_dls()),
         }
     }
+}
+
+/// Windows's built-in General MIDI instruments.
+pub fn windows_gm_dls() -> PathBuf {
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    PathBuf::from(root).join("System32").join("drivers").join("gm.dls")
 }
 
 /// An instrument file and the preset in it.

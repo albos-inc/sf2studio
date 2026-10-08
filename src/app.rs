@@ -132,10 +132,17 @@ impl Default for Saved {
     }
 }
 
-/// The instruments a new setup starts with: macOS's own General MIDI set
-/// there (so the lanes sound with nothing chosen), none elsewhere.
+/// The instruments a new setup starts with: the system's own General MIDI
+/// set on macOS and Windows (so the lanes sound with nothing chosen), none
+/// elsewhere.
 fn platform_sound() -> Sound {
-    let file = if cfg!(target_os = "macos") { SoundFile::MacBuiltIn } else { SoundFile::SameAsA };
+    let file = if cfg!(target_os = "macos") {
+        SoundFile::MacBuiltIn
+    } else if cfg!(target_os = "windows") {
+        SoundFile::WindowsBuiltIn
+    } else {
+        SoundFile::SameAsA
+    };
     Sound { file, bank: 0, program: 0 }
 }
 
@@ -823,6 +830,9 @@ impl StudioApp {
                                     }
                                     SoundFile::File(path) => file_name(path),
                                     SoundFile::MacBuiltIn => t("macOS built-in GS", "Mac 内蔵 GS 音源").to_string(),
+                                    SoundFile::WindowsBuiltIn => {
+                                        t("Windows built-in GS", "Windows 内蔵 GS 音源").to_string()
+                                    }
                                 };
                                 egui::ComboBox::from_id_salt(("sound", lane.id))
                                     .width(170.0)
@@ -864,6 +874,19 @@ impl StudioApp {
                                                 .clicked()
                                         {
                                             sound.file = SoundFile::MacBuiltIn;
+                                            sound.bank = 0;
+                                            sound.program = 0;
+                                            rerender.push(i);
+                                        }
+                                        if cfg!(target_os = "windows")
+                                            && ui
+                                                .selectable_label(
+                                                    sound.file == SoundFile::WindowsBuiltIn,
+                                                    t("Windows built-in GS (gm.dls)", "Windows 内蔵 GS 音源（gm.dls）"),
+                                                )
+                                                .clicked()
+                                        {
+                                            sound.file = SoundFile::WindowsBuiltIn;
                                             sound.bank = 0;
                                             sound.program = 0;
                                             rerender.push(i);
@@ -1729,7 +1752,8 @@ impl StudioApp {
         let name = match &effective {
             Source::Synth { sound, .. } => {
                 let file = match &sound.file {
-                    SoundFile::MacBuiltIn => Some("GS (built-in)".to_string()),
+                    SoundFile::MacBuiltIn => Some("GS (macOS)".to_string()),
+                    SoundFile::WindowsBuiltIn => Some("GS (Windows)".to_string()),
                     file => file.path().as_deref().map(file_name),
                 };
                 match file {
@@ -2113,6 +2137,11 @@ mod tests {
             ));
         } else {
             assert!(matches!(&saved.lanes[1], Source::Wav { .. }));
+            if cfg!(target_os = "windows") {
+                assert!(
+                    matches!(&saved.lanes[0], Source::Synth { sound, .. } if sound.file == SoundFile::WindowsBuiltIn)
+                );
+            }
         }
     }
 }
