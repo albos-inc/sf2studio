@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use sf2synth::Synthesizer;
 
+mod create_ui;
+
 use crate::abx::Abx;
 use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_HIGH_HZ, SPECTRUM_LOW_HZ, SPECTRUM_ROWS, to_db};
 use crate::audio::{LaneAudio, Live, Player};
@@ -61,6 +63,8 @@ struct Saved {
     level_match: bool,
     layers: Layers,
     keyboard: KeyboardSettings,
+    origin: crate::create::Origin,
+    voicing: crate::create::Voicing,
 }
 
 /// How the on-screen keyboard plays.
@@ -119,6 +123,8 @@ impl Default for Saved {
             level_match: true,
             layers: Layers::default(),
             keyboard: KeyboardSettings::default(),
+            origin: crate::create::Origin::default(),
+            voicing: crate::create::Voicing::default(),
         }
     }
 }
@@ -221,6 +227,9 @@ pub struct StudioApp {
     /// The program's notes, for the measurements.
     program_notes: Option<(Program, Arc<Vec<Note>>)>,
     abx: Abx,
+    create: create_ui::CreateState,
+    /// The generation of the created instrument the live synthesizer plays.
+    live_created: Option<u64>,
 }
 
 impl StudioApp {
@@ -264,6 +273,8 @@ impl StudioApp {
             fit_view: false,
             program_notes: None,
             abx: Abx::new(),
+            create: create_ui::CreateState::new(saved.origin, saved.voicing),
+            live_created: None,
         };
         for source in saved.lanes.into_iter().take(MAX_LANES) {
             app.add_lane(source);
@@ -1040,25 +1051,29 @@ impl StudioApp {
         }
     }
 
-    fn create_ui(&mut self, ui: &mut egui::Ui) {
-        ui.vertical_centered(|ui| {
-            ui.add_space(80.0);
-            ui.heading(self.t("Create an SF2", "SF2 を作る"));
-            ui.add_space(12.0);
-            ui.label(self.t(
-                "Coming next: start from an SF2, a recording or synthesis, shape brightness, hardness, sustain, \
-                 velocity layers and tuning, and write a new SF2 file.",
-                "次の段階で追加します: 既存の SF2・録音・合成を元に、明るさ・硬さ・余韻・ベロシティレイヤー・\
-                 調律を整えて、新しい SF2 として書き出します。",
-            ));
-        });
-    }
-
     // MARK: - Keyboard
 
     /// Keeps the live synthesizer in step with the focused lane (Tune mode,
     /// sf2synth lanes only).
     fn ensure_live(&mut self) {
+        if self.mode == Mode::Create {
+            let generation = self.create.created_generation();
+            if self.live_created != generation || self.live_for.is_some() {
+                self.live_for = None;
+                self.live_created = generation;
+                let synth = self.create.created_font().and_then(|font| {
+                    let tuning = SynthTuning::default();
+                    Synthesizer::new(font, &tuning.settings(self.sample_rate)).ok()
+                });
+                self.with_transport(|t| t.live = synth.map(|s| Live::new(s, 1.0)));
+            }
+            return;
+        }
+        if self.live_created.take().is_some() {
+            // Back from Create: the lanes' synthesizer comes next.
+            self.live_for = None;
+            self.with_transport(|t| t.live = None);
+        }
         let wanted = match (self.mode, self.focus < self.lanes.len()) {
             (Mode::Tune, true) => match self.effective_source(self.focus) {
                 source @ Source::Synth { engine: Engine::Sf2synth, .. }
@@ -1136,6 +1151,9 @@ impl StudioApp {
 
     /// Renders the note just played in every lane, to look at and compare.
     fn finish_note(&mut self, key: u8, velocity: u8, length: f32) {
+        if self.mode == Mode::Create {
+            return;
+        }
         self.program = Program::Note { key, velocity, length: length.max(0.05) };
         self.with_transport(|t| {
             t.position = 0;
@@ -1153,13 +1171,13 @@ impl StudioApp {
             match status {
                 0x90 if velocity > 0 => {
                     self.midi_sounding.push(key);
-                    if self.mode == Mode::Tune {
+                    if matches!(self.mode, Mode::Tune | Mode::Create) {
                         self.key_down(key, velocity, true);
                     }
                 }
                 0x80 | 0x90 => {
                     self.midi_sounding.retain(|&k| k != key);
-                    if self.mode == Mode::Tune {
+                    if matches!(self.mode, Mode::Tune | Mode::Create) {
                         self.key_up(key, true);
                     }
                 }
@@ -1171,7 +1189,8 @@ impl StudioApp {
     fn keyboard_ui(&mut self, ui: &mut egui::Ui) {
         let japanese = self.japanese;
         let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
-        let live = self.live_for.is_some();
+        let live = self.live_for.is_some() || self.live_created.is_some();
+        let creating = self.mode == Mode::Create;
         ui.horizontal(|ui| {
             let settings = &mut self.keyboard_settings;
             ui.checkbox(&mut settings.fixed_velocity, t("Fixed velocity", "強さを固定"));
@@ -1217,16 +1236,27 @@ impl StudioApp {
             if !live {
                 ui.colored_label(
                     Color32::from_rgb(240, 190, 90),
-                    t(
-                        "Focus an sf2synth lane with an SF2 to play the keys.",
-                        "鍵盤を鳴らすには、SF2 を選んだ sf2synth のレーンを調整対象にしてください。",
-                    ),
+                    if creating {
+                        t("Make the instrument above to play it here.", "上で音源を作ると、ここで試し弾きできます。")
+                    } else {
+                        t(
+                            "Focus an sf2synth lane with an SF2 to play the keys.",
+                            "鍵盤を鳴らすには、SF2 を選んだ sf2synth のレーンを調整対象にしてください。",
+                        )
+                    },
                 );
             } else {
-                ui.weak(t(
-                    "Press higher on a key for soft, lower for loud. Release to see the note in every lane.",
-                    "鍵盤の上の方ほど弱く、下の方ほど強く鳴ります。離すとその音を全レーンで表示します。",
-                ));
+                ui.weak(if creating {
+                    t(
+                        "Press higher on a key for soft, lower for loud.",
+                        "鍵盤の上の方ほど弱く、下の方ほど強く鳴ります。",
+                    )
+                } else {
+                    t(
+                        "Press higher on a key for soft, lower for loud. Release to see the note in every lane.",
+                        "鍵盤の上の方ほど弱く、下の方ほど強く鳴ります。離すとその音を全レーンで表示します。",
+                    )
+                });
             }
         });
         ui.add_space(4.0);
@@ -1864,15 +1894,22 @@ impl eframe::App for StudioApp {
             self.top_bar(ui);
             ui.add_space(4.0);
         });
-        egui::Panel::bottom("transport").show(ui, |ui| {
-            ui.add_space(4.0);
-            self.transport_bar(ui);
-            ui.add_space(4.0);
-        });
-        if self.mode == Mode::Tune {
+        if self.mode != Mode::Create {
+            egui::Panel::bottom("transport").show(ui, |ui| {
+                ui.add_space(4.0);
+                self.transport_bar(ui);
+                ui.add_space(4.0);
+            });
+        }
+        if matches!(self.mode, Mode::Tune | Mode::Create) {
             egui::Panel::bottom("keyboard").resizable(true).default_size(210.0).min_size(120.0).show(ui, |ui| {
                 ui.add_space(4.0);
                 self.keyboard_ui(ui);
+            });
+        }
+        if self.mode == Mode::Create {
+            egui::Panel::left("origin").resizable(true).default_size(300.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.origin_ui(ui));
             });
         }
         if self.mode != Mode::Create {
@@ -1904,7 +1941,9 @@ impl eframe::App for StudioApp {
             Mode::Create => self.create_ui(ui),
             Mode::Tune | Mode::Compare => self.timeline(ui),
         });
+        self.poll_create(ui.ctx());
         if self.is_playing()
+            || self.create.busy()
             || self.pending_render.is_some()
             || self.pressed.is_some()
             || self.lanes.iter().any(|l| l.rendering)
@@ -1922,6 +1961,8 @@ impl eframe::App for StudioApp {
             level_match: self.level_match,
             layers: self.layers,
             keyboard: self.keyboard_settings,
+            origin: self.create.origin.clone(),
+            voicing: self.create.voicing.clone(),
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
     }
@@ -1952,6 +1993,11 @@ fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
             }
             ("--wav", Some(path)) => {
                 lanes.push(Source::Wav { path: Some(path.clone()) });
+                2
+            }
+            ("--create", Some(path)) => {
+                saved.origin = crate::create::Origin::Sf2 { path: Some(path.clone()), bank: 0, program: 0 };
+                saved.mode = Mode::Create;
                 2
             }
             ("--midi", Some(path)) => {

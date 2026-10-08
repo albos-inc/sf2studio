@@ -6,6 +6,7 @@ mod abx;
 mod analysis;
 mod app;
 mod audio;
+mod create;
 mod gm;
 mod keyboard;
 mod mac_sampler;
