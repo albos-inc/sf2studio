@@ -132,10 +132,15 @@ impl Default for Saved {
     }
 }
 
-/// The second lane a new setup starts with: the platform's own sampler on
-/// macOS (following lane A's SF2), a recording elsewhere.
+/// The second lane a new setup starts with: on macOS the system's own
+/// sampler playing the system's own instruments (sounds with nothing
+/// chosen), elsewhere a recording.
 fn reference_lane() -> Source {
-    if cfg!(target_os = "macos") { Source::mac_sampler(Sound::same_as_a()) } else { Source::Wav { path: None } }
+    if cfg!(target_os = "macos") {
+        Source::mac_sampler(Sound { file: SoundFile::MacBuiltIn, bank: 0, program: 0 })
+    } else {
+        Source::Wav { path: None }
+    }
 }
 
 fn system_is_japanese() -> bool {
@@ -2093,4 +2098,24 @@ fn heat(t: f32) -> Color32 {
         }
     }
     Color32::from_rgb(252, 250, 190)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_setup_starts_with_sf2synth_and_the_platform_reference() {
+        let saved = Saved::default();
+        assert!(matches!(&saved.lanes[0], Source::Synth { engine: Engine::Sf2synth, .. }));
+        if cfg!(target_os = "macos") {
+            // The macOS sampler with macOS's own instruments: sounds with nothing chosen.
+            assert!(matches!(
+                &saved.lanes[1],
+                Source::Synth { engine: Engine::MacSampler, sound, .. } if sound.file == SoundFile::MacBuiltIn
+            ));
+        } else {
+            assert!(matches!(&saved.lanes[1], Source::Wav { .. }));
+        }
+    }
 }
