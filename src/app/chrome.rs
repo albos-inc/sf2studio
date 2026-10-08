@@ -96,8 +96,8 @@ impl StudioApp {
                 .chrome
                 .icon
                 .get_or_insert_with(|| {
-                    let data = theme::app_icon(64);
-                    let image = egui::ColorImage::from_rgba_unmultiplied([64, 64], &data.rgba);
+                    let data = theme::app_icon();
+                    let image = egui::ColorImage::from_rgba_unmultiplied([256, 256], &data.rgba);
                     ui.ctx().load_texture("app-icon", image, egui::TextureOptions::LINEAR)
                 })
                 .clone();

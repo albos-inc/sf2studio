@@ -23,7 +23,7 @@ fn main() -> eframe::Result {
             .with_title("sf2studio")
             .with_inner_size([1280.0, 820.0])
             .with_min_inner_size([900.0, 560.0])
-            .with_icon(std::sync::Arc::new(theme::app_icon(256))),
+            .with_icon(std::sync::Arc::new(theme::app_icon())),
         ..Default::default()
     };
     eframe::run_native("sf2studio", options, Box::new(|cc| Ok(Box::new(app::StudioApp::new(cc)))))

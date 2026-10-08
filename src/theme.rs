@@ -1,6 +1,6 @@
 //! Look and feel: fonts (one family for Latin and Japanese so both sit on
 //! the same line), icons, colors, rounding, spacing, the light/dark theme
-//! and the app icon.
+//! and the app icon (drawn in `assets/icon.svg`).
 
 use std::sync::Arc;
 
@@ -175,63 +175,9 @@ pub fn install(ctx: &egui::Context) {
     });
 }
 
-/// The app icon: a rounded square with piano keys and a waveform, `size`
-/// pixels square, RGBA.
-pub fn app_icon(size: u32) -> egui::IconData {
-    let s = size as f32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let radius = s * 0.22;
-    let inside = |x: f32, y: f32| -> f32 {
-        // Coverage of the rounded square at (x, y), anti-aliased.
-        let (cx, cy) = (x.clamp(radius, s - radius), y.clamp(radius, s - radius));
-        let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
-        (radius - d + 0.5).clamp(0.0, 1.0)
-    };
-    for py in 0..size {
-        for px in 0..size {
-            let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
-            let coverage = inside(x, y);
-            if coverage <= 0.0 {
-                continue;
-            }
-            // Indigo to violet, top to bottom.
-            let t = y / s;
-            let mut color = [(52.0 + 60.0 * t), (64.0 - 20.0 * t), (190.0 + 20.0 * t)];
-            // Keys in the lower third.
-            let keys_top = s * 0.62;
-            if y > keys_top && y < s * 0.9 && x > s * 0.12 && x < s * 0.88 {
-                let key_width = (s * 0.76) / 7.0;
-                let k = ((x - s * 0.12) / key_width).floor();
-                let within = (x - s * 0.12) - k * key_width;
-                color = if within < key_width * 0.06 { [70.0, 70.0, 110.0] } else { [245.0, 245.0, 250.0] };
-                let black =
-                    [0.0, 1.0, 3.0, 4.0, 5.0].contains(&k) && within > key_width * 0.68 && y < keys_top + s * 0.16;
-                let black_left =
-                    [1.0, 2.0, 4.0, 5.0, 6.0].contains(&k) && within < key_width * 0.32 && y < keys_top + s * 0.16;
-                if black || black_left {
-                    color = [30.0, 30.0, 45.0];
-                }
-            }
-            // A waveform above the keys.
-            let wave_y =
-                s * 0.38 + (x / s * 3.0 * std::f32::consts::TAU).sin() * s * 0.1 * (1.0 - (x / s - 0.5).abs() * 1.4);
-            let distance = (y - wave_y).abs();
-            if x > s * 0.1 && x < s * 0.9 && distance < s * 0.03 {
-                let a = (1.0 - distance / (s * 0.03)).clamp(0.0, 1.0);
-                color = [
-                    color[0] * (1.0 - a) + 255.0 * a,
-                    color[1] * (1.0 - a) + 196.0 * a,
-                    color[2] * (1.0 - a) + 70.0 * a,
-                ];
-            }
-            let i = ((py * size + px) * 4) as usize;
-            rgba[i] = color[0] as u8;
-            rgba[i + 1] = color[1] as u8;
-            rgba[i + 2] = color[2] as u8;
-            rgba[i + 3] = (coverage * 255.0) as u8;
-        }
-    }
-    egui::IconData { rgba, width: size, height: size }
+/// The app icon (`assets/icon.svg`, rendered by `cargo run --example make_icon`).
+pub fn app_icon() -> egui::IconData {
+    egui::IconData { rgba: include_bytes!("../assets/icon-256.rgba").to_vec(), width: 256, height: 256 }
 }
 
 /// A section heading: bold, a little larger than body text.

@@ -26,6 +26,17 @@ sf2synth = { git = "https://github.com/albos-inc/sf2synth", branch = "main" }
 toml = "1.1.6"
 ureq = { version = "3.4.2", default-features = false, features = ["native-tls", "gzip"] }
 
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+# For `cargo bundle` (macOS .app).
+[package.metadata.bundle]
+name = "sf2studio"
+identifier = "jp.albos.sf2studio"
+icon = ["assets/icon-32.png", "assets/icon-128.png", "assets/icon-256.png", "assets/icon-512.png", "assets/icon-1024.png"]
+category = "public.app-category.music"
+copyright = "© 2026 Albos Inc."
+
 [profile.release]
 debug = 1
 
@@ -36,3 +47,6 @@ opt-level = 2
 objc2 = "0.6.5"
 objc2-avf-audio = "0.3.2"
 objc2-foundation = "0.3.2"
+
+[dev-dependencies]
+resvg = "0.48.1"

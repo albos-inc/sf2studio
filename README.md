@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon-256.png" width="128" alt="sf2studio"></p>
+
 # sf2studio
 
 Make, tune and compare SF2 instruments — a desktop app for macOS and
@@ -46,6 +48,12 @@ cargo run --release -- --sf2 piano.sf2 --mac piano.sf2 --mac-builtin --midi song
 `--sf2`, `--mac` (macOS sampler), `--mac-builtin` (macOS's GS set) and
 `--wav` add lanes in order; `--create <sf2>` opens Create on a file;
 `--theme light|dark|system`.
+
+## Icon
+
+The icon is drawn in `assets/icon.svg`. `cargo run --example make_icon`
+renders it into the PNGs, the window icon, `sf2studio.ico` (embedded in the
+Windows executable) and, on macOS, `sf2studio.icns`.
 
 ## License
 
