@@ -120,14 +120,13 @@ impl Transport {
                     (*level - 1.0 / FADE_FRAMES).max(0.0)
                 };
             }
-            if *level > 0.0 {
-                if let Some(lane) = lane {
-                    if position < lane.audio.frames() {
-                        let g = lane.gain * *level;
-                        left += lane.audio.left[position] * g;
-                        right += lane.audio.right[position] * g;
-                    }
-                }
+            if *level > 0.0
+                && let Some(lane) = lane
+                && position < lane.audio.frames()
+            {
+                let g = lane.gain * *level;
+                left += lane.audio.left[position] * g;
+                right += lane.audio.right[position] * g;
             }
         }
         self.position += 1;

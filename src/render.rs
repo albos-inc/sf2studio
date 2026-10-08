@@ -105,7 +105,7 @@ pub enum Program {
 }
 
 impl Program {
-    fn midi_bytes(&self) -> Result<Vec<u8>, String> {
+    pub fn midi_bytes(&self) -> Result<Vec<u8>, String> {
         match self {
             Program::Pattern(pattern) => Ok(pattern.midi()),
             Program::Midi(path) => std::fs::read(path).map_err(|e| format!("{}: {e}", path.display())),

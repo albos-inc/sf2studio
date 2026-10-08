@@ -2,7 +2,7 @@
 name = "sf2studio"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.95"
 description = "Make, tune and compare SF2 instruments: an SF2 generator, a tuning player and an A/B comparison tool built on sf2synth."
 license = "MIT OR Apache-2.0"
 authors = ["Albos Inc."]
@@ -14,6 +14,7 @@ categories = ["multimedia::audio"]
 [dependencies]
 cpal = "0.18.2"
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui_plot = "0.37"
 hound = "3.5.1"
 midir = "0.11.0"
 realfft = "3.5.0"

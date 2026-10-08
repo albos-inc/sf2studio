@@ -8,6 +8,7 @@ mod audio;
 mod gm;
 mod keyboard;
 mod mac_sampler;
+mod measure;
 mod midi_in;
 mod patterns;
 mod render;

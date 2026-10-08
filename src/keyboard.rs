@@ -113,15 +113,15 @@ impl Keyboard {
         }
 
         // The last note: a bar on its key as high as its velocity.
-        if let Some((key, velocity)) = last {
-            if let Some(&(_, r)) = black_rects.iter().chain(white_rects.iter()).find(|(k, _)| *k == key) {
-                let height = r.height() * velocity as f32 / 127.0;
-                let bar = Rect::from_min_max(
-                    Pos2::new(r.left() + 1.0, r.bottom() - height),
-                    Pos2::new(r.left() + 4.0, r.bottom()),
-                );
-                painter.rect_filled(bar, 1.0, Color32::from_rgb(255, 200, 60));
-            }
+        if let Some((key, velocity)) = last
+            && let Some(&(_, r)) = black_rects.iter().chain(white_rects.iter()).find(|(k, _)| *k == key)
+        {
+            let height = r.height() * velocity as f32 / 127.0;
+            let bar = Rect::from_min_max(
+                Pos2::new(r.left() + 1.0, r.bottom() - height),
+                Pos2::new(r.left() + 4.0, r.bottom()),
+            );
+            painter.rect_filled(bar, 1.0, Color32::from_rgb(255, 200, 60));
         }
 
         // Where the pointer is: key, and the velocity a press there gives.

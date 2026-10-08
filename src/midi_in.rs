@@ -62,10 +62,10 @@ impl MidiIn {
                     }
                     let mut message = message.to_vec();
                     message[0] = status & 0xf0;
-                    if let Ok(mut transport) = transport.lock() {
-                        if let Some(live) = &mut transport.live {
-                            live.synth.process_midi_message(&message);
-                        }
+                    if let Ok(mut transport) = transport.lock()
+                        && let Some(live) = &mut transport.live
+                    {
+                        live.synth.process_midi_message(&message);
                     }
                     let _ = sender.send(message);
                     repaint();

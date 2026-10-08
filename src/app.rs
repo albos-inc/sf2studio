@@ -17,6 +17,7 @@ use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_HIGH_HZ, SPECTRUM_L
 use crate::audio::{LaneAudio, Live, Player};
 use crate::gm;
 use crate::keyboard::{KeyEvent, Keyboard};
+use crate::measure::{self, DECAY_DB, Note, NoteMeasure};
 use crate::midi_in::MidiIn;
 use crate::patterns::{NOTE_START, TestPattern, key_hz, key_name};
 use crate::render::{Engine, Job, Program, Renderer, Sound, SoundFile, Source};
@@ -43,6 +44,10 @@ pub enum Mode {
     Tune,
     Compare,
 }
+
+/// One lane's notes of one key across velocities: (lane, key, points of
+/// velocity, level, brightness).
+type Sweep = (usize, u8, Vec<(f64, f64, f64)>);
 
 /// What is remembered between launches.
 #[derive(Serialize, Deserialize)]
@@ -90,11 +95,15 @@ struct Layers {
     spectrogram: bool,
     envelope: bool,
     closeup: bool,
+    /// Measurement charts (Compare mode).
+    measure: bool,
+    /// Charts relative to each key's loudest / brightest note.
+    relative: bool,
 }
 
 impl Default for Layers {
     fn default() -> Self {
-        Layers { spectrogram: true, envelope: true, closeup: true }
+        Layers { spectrogram: true, envelope: true, closeup: true, measure: true, relative: true }
     }
 }
 
@@ -146,12 +155,24 @@ struct Lane {
     analysis: Option<Arc<Analysis>>,
     /// The spectrogram, drawn with the level-matching gain (dB) it was made for.
     texture: Option<(TextureHandle, f32)>,
+    /// Per-note measurements of the program, made when first shown.
+    measures: Option<Vec<NoteMeasure>>,
     error: Option<String>,
 }
 
 impl Lane {
     fn new(id: u64, source: Source) -> Lane {
-        Lane { id, source, generation: 0, rendering: false, audio: None, analysis: None, texture: None, error: None }
+        Lane {
+            id,
+            source,
+            generation: 0,
+            rendering: false,
+            audio: None,
+            analysis: None,
+            texture: None,
+            measures: None,
+            error: None,
+        }
     }
 }
 
@@ -195,6 +216,8 @@ pub struct StudioApp {
     midi_ports: Vec<String>,
     /// Show the whole program once the lanes have rendered it.
     fit_view: bool,
+    /// The program's notes, for the measurements.
+    program_notes: Option<(Program, Arc<Vec<Note>>)>,
 }
 
 impl StudioApp {
@@ -236,6 +259,7 @@ impl StudioApp {
             midi_in: MidiIn::new(),
             midi_ports: Vec::new(),
             fit_view: false,
+            program_notes: None,
         };
         for source in saved.lanes.into_iter().take(MAX_LANES) {
             app.add_lane(source);
@@ -315,12 +339,14 @@ impl StudioApp {
                     lane.audio = Some(audio);
                     lane.analysis = Some(analysis);
                     lane.texture = None;
+                    lane.measures = None;
                     lane.error = None;
                 }
                 Err(error) => {
                     lane.audio = None;
                     lane.analysis = None;
                     lane.texture = None;
+                    lane.measures = None;
                     lane.error = Some(error);
                 }
             }
@@ -335,12 +361,12 @@ impl StudioApp {
                 self.view.follow = false;
             }
         }
-        if let Some((id, at)) = self.pending_render {
-            if at.elapsed() >= RENDER_DELAY {
-                self.pending_render = None;
-                if let Some(index) = self.lanes.iter().position(|l| l.id == id) {
-                    self.render_lane(index);
-                }
+        if let Some((id, at)) = self.pending_render
+            && at.elapsed() >= RENDER_DELAY
+        {
+            self.pending_render = None;
+            if let Some(index) = self.lanes.iter().position(|l| l.id == id) {
+                self.render_lane(index);
             }
         }
     }
@@ -638,11 +664,11 @@ impl StudioApp {
                     }
                 }
             });
-        if ui.button(self.t("Open MIDI file…", "MIDI ファイルを開く…")).clicked() {
-            if let Some(path) = rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi", "kar", "rmi"]).pick_file() {
-                self.program = Program::Midi(path);
-                changed = true;
-            }
+        if ui.button(self.t("Open MIDI file…", "MIDI ファイルを開く…")).clicked()
+            && let Some(path) = rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi", "kar", "rmi"]).pick_file()
+        {
+            self.program = Program::Midi(path);
+            changed = true;
         }
         if changed {
             self.with_transport(|t| {
@@ -772,17 +798,15 @@ impl StudioApp {
                                                 t("Choose a file (SF2 / DLS)…", "ファイルを選ぶ（SF2 / DLS）…"),
                                             )
                                             .clicked()
-                                        {
-                                            if let Some(path) = rfd::FileDialog::new()
+                                            && let Some(path) = rfd::FileDialog::new()
                                                 .add_filter("SF2 / DLS", &["sf2", "dls"])
                                                 .pick_file()
-                                            {
-                                                self.renderer.forget_font(&path);
-                                                sound.file = SoundFile::File(path);
-                                                sound.bank = 0;
-                                                sound.program = 0;
-                                                rerender.push(i);
-                                            }
+                                        {
+                                            self.renderer.forget_font(&path);
+                                            sound.file = SoundFile::File(path);
+                                            sound.bank = 0;
+                                            sound.program = 0;
+                                            rerender.push(i);
                                         }
                                         if cfg!(target_os = "macos")
                                             && ui
@@ -840,11 +864,11 @@ impl StudioApp {
                                 .as_deref()
                                 .map(file_name)
                                 .unwrap_or_else(|| t("Choose a WAV…", "WAV を選ぶ…").to_string());
-                            if ui.button(label).clicked() {
-                                if let Some(chosen) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).pick_file() {
-                                    *path = Some(chosen);
-                                    rerender.push(i);
-                                }
+                            if ui.button(label).clicked()
+                                && let Some(chosen) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).pick_file()
+                            {
+                                *path = Some(chosen);
+                                rerender.push(i);
                             }
                         }
                     }
@@ -872,15 +896,15 @@ impl StudioApp {
                 },
             );
         }
-        if let Some(i) = remove {
-            if self.lanes.len() > 1 {
-                self.lanes.remove(i);
-                self.outputs.remove(i);
-                if self.focus >= self.lanes.len() || self.focus > i {
-                    self.focus = self.focus.saturating_sub(1);
-                }
-                self.sync_player();
+        if let Some(i) = remove
+            && self.lanes.len() > 1
+        {
+            self.lanes.remove(i);
+            self.outputs.remove(i);
+            if self.focus >= self.lanes.len() || self.focus > i {
+                self.focus = self.focus.saturating_sub(1);
             }
+            self.sync_player();
         }
         // Lanes playing lane A's sound follow its changes.
         if rerender.contains(&0) {
@@ -956,25 +980,22 @@ impl StudioApp {
             if ui.button(t("Reset", "初期値に戻す")).clicked() {
                 *tuning = SynthTuning::default();
             }
-            if ui.button(t("Save…", "保存…")).clicked() {
-                if let Some(path) =
+            if ui.button(t("Save…", "保存…")).clicked()
+                && let Some(path) =
                     rfd::FileDialog::new().add_filter("TOML", &["toml"]).set_file_name("sf2synth.toml").save_file()
-                {
-                    message = Some(match std::fs::write(&path, tuning.to_toml()) {
-                        Ok(()) => format!("{} {}", t("Saved", "保存しました:"), path.display()),
-                        Err(e) => e.to_string(),
-                    });
-                }
+            {
+                message = Some(match std::fs::write(&path, tuning.to_toml()) {
+                    Ok(()) => format!("{} {}", t("Saved", "保存しました:"), path.display()),
+                    Err(e) => e.to_string(),
+                });
             }
-            if ui.button(t("Load…", "読み込む…")).clicked() {
-                if let Some(path) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).pick_file() {
-                    match std::fs::read_to_string(&path)
-                        .map_err(|e| e.to_string())
-                        .and_then(|s| SynthTuning::from_toml(&s))
-                    {
-                        Ok(loaded) => *tuning = loaded,
-                        Err(e) => message = Some(e),
-                    }
+            if ui.button(t("Load…", "読み込む…")).clicked()
+                && let Some(path) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).pick_file()
+            {
+                match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| SynthTuning::from_toml(&s))
+                {
+                    Ok(loaded) => *tuning = loaded,
+                    Err(e) => message = Some(e),
                 }
             }
         });
@@ -1191,6 +1212,175 @@ impl StudioApp {
         }
     }
 
+    // MARK: - Measurements
+
+    /// The program's notes (parsed once per program).
+    fn program_notes(&mut self) -> Arc<Vec<Note>> {
+        if let Some((program, notes)) = &self.program_notes
+            && *program == self.program
+        {
+            return Arc::clone(notes);
+        }
+        let notes = Arc::new(
+            self.program
+                .midi_bytes()
+                .ok()
+                .and_then(|bytes| sf2synth::MidiFile::from_bytes(&bytes).ok())
+                .map(|midi| measure::notes(&midi))
+                .unwrap_or_default(),
+        );
+        self.program_notes = Some((self.program.clone(), Arc::clone(&notes)));
+        notes
+    }
+
+    /// Charts of each lane's notes: velocity against level and brightness,
+    /// and decay time across the keyboard.
+    fn measure_ui(&mut self, ui: &mut egui::Ui) {
+        use egui_plot::{Legend, Line, LineStyle, Plot, PlotPoints, Points};
+
+        let notes = self.program_notes();
+        let rate = self.sample_rate;
+        for lane in &mut self.lanes {
+            if lane.measures.is_none()
+                && let Some(analysis) = &lane.analysis
+            {
+                lane.measures = Some(measure::measure(analysis, rate, &notes));
+            }
+        }
+        let japanese = self.japanese;
+        let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
+        let relative = self.layers.relative;
+
+        // Per lane, per key with at least three velocities: (velocity, level, brightness) sorted.
+        let mut sweeps: Vec<Sweep> = Vec::new();
+        let mut decays: Vec<(usize, Vec<[f64; 2]>)> = Vec::new();
+        for (i, lane) in self.lanes.iter().enumerate() {
+            let Some(measures) = &lane.measures else { continue };
+            let mut keys: Vec<u8> = measures.iter().map(|m| m.key).collect();
+            keys.sort_unstable();
+            keys.dedup();
+            let mut decay_points = Vec::new();
+            for key in keys {
+                let of_key: Vec<&NoteMeasure> = measures.iter().filter(|m| m.key == key).collect();
+                let mut velocities: Vec<u8> = of_key.iter().map(|m| m.velocity).collect();
+                velocities.sort_unstable();
+                velocities.dedup();
+                if velocities.len() >= 3 {
+                    let loudest = of_key.iter().map(|m| m.peak_db).fold(f32::MIN, f32::max);
+                    let brightest = of_key.iter().map(|m| m.brightness_hz).fold(f32::MIN, f32::max).max(1.0);
+                    let mut points: Vec<(f64, f64, f64)> = of_key
+                        .iter()
+                        .map(|m| {
+                            let level = if relative { m.peak_db - loudest } else { m.peak_db };
+                            let bright = if relative { m.brightness_hz / brightest * 100.0 } else { m.brightness_hz };
+                            (m.velocity as f64, level as f64, bright as f64)
+                        })
+                        .collect();
+                    points.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    sweeps.push((i, key, points));
+                }
+                let times: Vec<f32> = of_key.iter().filter_map(|m| m.decay_s).collect();
+                if !times.is_empty() {
+                    decay_points.push([key as f64, (times.iter().sum::<f32>() / times.len() as f32) as f64]);
+                }
+            }
+            if decay_points.len() >= 2 {
+                decays.push((i, decay_points));
+            }
+        }
+
+        ui.horizontal(|ui| {
+            ui.strong(t("Measurements", "計測"));
+            ui.checkbox(&mut self.layers.relative, t("Relative to each key's maximum", "鍵ごとの最大を基準にする"));
+            if sweeps.is_empty() && decays.is_empty() {
+                ui.weak(t(
+                    "Choose the velocity sweep, long notes or chromatic test pattern to measure.",
+                    "テストパターンの「ベロシティの段階」「長い音」「半音階」を選ぶと計測できます。",
+                ));
+            }
+        });
+        if sweeps.is_empty() && decays.is_empty() {
+            return;
+        }
+        let height = 210.0;
+        let width = (ui.available_width() - 16.0) / 3.0;
+        let styles = [LineStyle::Solid, LineStyle::dashed_loose(), LineStyle::dotted_dense()];
+        let key_style = |key_index: usize| styles[key_index % styles.len()];
+        let lane_keys = |lane: usize| -> Vec<u8> { sweeps.iter().filter(|s| s.0 == lane).map(|s| s.1).collect() };
+        ui.horizontal(|ui| {
+            for (chart, (title_en, title_ja, unit)) in [
+                ("Velocity → level", "ベロシティ → 音量", if relative { "dB (rel.)" } else { "dB" }),
+                ("Velocity → brightness", "ベロシティ → 明るさ", if relative { "% of max" } else { "Hz" }),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(if japanese { title_ja } else { title_en }).small().strong());
+                    Plot::new(("measure", chart))
+                        .width(width)
+                        .height(height)
+                        .legend(Legend::default())
+                        .x_axis_label(t("velocity", "ベロシティ"))
+                        .y_axis_label(unit)
+                        .include_x(0.0)
+                        .include_x(127.0)
+                        .allow_scroll(false)
+                        .show(ui, |plot| {
+                            for (lane, key, points) in &sweeps {
+                                let index = lane_keys(*lane).iter().position(|k| k == key).unwrap_or(0);
+                                let series: Vec<[f64; 2]> =
+                                    points.iter().map(|p| [p.0, if chart == 0 { p.1 } else { p.2 }]).collect();
+                                let name = format!("{} {}", lane_letter(*lane), key_name(*key));
+                                plot.line(
+                                    Line::new(name.clone(), PlotPoints::from(series.clone()))
+                                        .color(LANE_COLORS[*lane])
+                                        .style(key_style(index))
+                                        .width(1.6),
+                                );
+                                plot.points(
+                                    Points::new(name, PlotPoints::from(series)).color(LANE_COLORS[*lane]).radius(2.5),
+                                );
+                            }
+                        });
+                });
+            }
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(t("Decay per key", "鍵盤ごとの減衰")).small().strong());
+                Plot::new(("measure", 2))
+                    .width(width)
+                    .height(height)
+                    .legend(Legend::default())
+                    .x_axis_label(t("key", "鍵盤"))
+                    .y_axis_label(format!("s to -{DECAY_DB:.0} dB"))
+                    .include_y(0.0)
+                    .allow_scroll(false)
+                    .show(ui, |plot| {
+                        for (lane, points) in &decays {
+                            let name = lane_letter(*lane).to_string();
+                            plot.line(
+                                Line::new(name.clone(), PlotPoints::from(points.clone()))
+                                    .color(LANE_COLORS[*lane])
+                                    .width(1.6),
+                            );
+                            plot.points(
+                                Points::new(name, PlotPoints::from(points.clone()))
+                                    .color(LANE_COLORS[*lane])
+                                    .radius(2.5),
+                            );
+                        }
+                    });
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.weak(t(
+                "Left: velocity → peak level · Middle: velocity → brightness (spectral centroid) · Right: decay time per key. Line styles tell the keys apart.",
+                "左: ベロシティ → ピーク音量 · 中: ベロシティ → 明るさ（スペクトル重心） · 右: 鍵盤ごとの減衰時間。線の種類で鍵盤を区別しています。",
+            ));
+        });
+        ui.separator();
+    }
+
     // MARK: - Timeline
 
     /// Toggles for what the timeline shows.
@@ -1201,6 +1391,9 @@ impl StudioApp {
             ui.toggle_value(&mut self.layers.spectrogram, if japanese { "スペクトログラム" } else { "Spectrogram" });
             ui.toggle_value(&mut self.layers.envelope, if japanese { "音量推移 (dB)" } else { "Level (dB)" });
             ui.toggle_value(&mut self.layers.closeup, if japanese { "拡大波形" } else { "Waveform close-up" });
+            if self.mode == Mode::Compare {
+                ui.toggle_value(&mut self.layers.measure, if japanese { "計測グラフ" } else { "Measurements" });
+            }
         });
     }
 
@@ -1228,6 +1421,9 @@ impl StudioApp {
         self.view.start = self.view.start.clamp(0.0, (duration - self.view.span).max(0.0));
 
         self.layers_bar(ui);
+        if self.mode == Mode::Compare && self.layers.measure {
+            self.measure_ui(ui);
+        }
         let available = ui.available_size();
         let (rect, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
@@ -1318,35 +1514,35 @@ impl StudioApp {
 
         // Interaction.
         let shift = ui.input(|i| i.modifiers.shift);
-        if let Some(pointer) = response.interact_pointer_pos() {
-            if lanes_rect.contains(pointer) || pointer.y < lanes_rect.top() {
-                let t = to_t(pointer.x).clamp(0.0, duration);
-                if response.drag_started() && shift {
-                    self.loop_drag = Some(t);
+        if let Some(pointer) = response.interact_pointer_pos()
+            && (lanes_rect.contains(pointer) || pointer.y < lanes_rect.top())
+        {
+            let t = to_t(pointer.x).clamp(0.0, duration);
+            if response.drag_started() && shift {
+                self.loop_drag = Some(t);
+            }
+            if let Some(start) = self.loop_drag {
+                let rate = self.sample_rate as f64;
+                let (a, b) = if t < start { (t, start) } else { (start, t) };
+                if b - a > 0.05 {
+                    self.with_transport(|tr| tr.loop_range = Some(((a * rate) as usize, (b * rate) as usize)));
                 }
-                if let Some(start) = self.loop_drag {
-                    let rate = self.sample_rate as f64;
-                    let (a, b) = if t < start { (t, start) } else { (start, t) };
-                    if b - a > 0.05 {
-                        self.with_transport(|tr| tr.loop_range = Some(((a * rate) as usize, (b * rate) as usize)));
-                    }
-                } else if response.clicked() || response.dragged() {
-                    self.seek(t);
-                    // Clicking a lane's header focuses it.
-                    let lane = ((pointer.y - lanes_rect.top()) / lane_height) as usize;
-                    let in_header = (pointer.y - lanes_rect.top()) % lane_height < 20.0;
-                    if response.clicked() && in_header && lane < self.lanes.len() {
-                        self.focus_lane(lane);
-                    }
+            } else if response.clicked() || response.dragged() {
+                self.seek(t);
+                // Clicking a lane's header focuses it.
+                let lane = ((pointer.y - lanes_rect.top()) / lane_height) as usize;
+                let in_header = (pointer.y - lanes_rect.top()) % lane_height < 20.0;
+                if response.clicked() && in_header && lane < self.lanes.len() {
+                    self.focus_lane(lane);
                 }
             }
         }
-        if response.drag_stopped() {
-            if let Some(start) = self.loop_drag.take() {
-                let _ = start;
-                if let Some(Some((a, _))) = self.with_transport(|t| t.loop_range) {
-                    self.seek(a as f64 / self.sample_rate as f64);
-                }
+        if response.drag_stopped()
+            && let Some(start) = self.loop_drag.take()
+        {
+            let _ = start;
+            if let Some(Some((a, _))) = self.with_transport(|t| t.loop_range) {
+                self.seek(a as f64 / self.sample_rate as f64);
             }
         }
         if response.hovered() {
