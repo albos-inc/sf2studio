@@ -15,10 +15,11 @@ use sf2synth::Synthesizer;
 
 use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_HIGH_HZ, SPECTRUM_LOW_HZ, SPECTRUM_ROWS, to_db};
 use crate::audio::{LaneAudio, Live, Player};
+use crate::gm;
 use crate::keyboard::{KeyEvent, Keyboard};
 use crate::midi_in::MidiIn;
 use crate::patterns::{NOTE_START, TestPattern, key_hz, key_name};
-use crate::render::{Job, Program, Renderer, Source};
+use crate::render::{Engine, Job, Program, Renderer, Sound, SoundFile, Source};
 use crate::tuning::{SynthTuning, VelocityCurve};
 
 const MAX_LANES: usize = 9;
@@ -103,7 +104,7 @@ impl Default for Saved {
             japanese: system_is_japanese(),
             mode: Mode::Compare,
             program: Program::Pattern(TestPattern::VelocitySweep),
-            lanes: vec![Source::Sf2 { path: None, tuning: SynthTuning::default() }, reference_lane()],
+            lanes: vec![Source::sf2synth(Sound { file: SoundFile::SameAsA, bank: 0, program: 0 }), reference_lane()],
             level_match: true,
             layers: Layers::default(),
             keyboard: KeyboardSettings::default(),
@@ -114,7 +115,7 @@ impl Default for Saved {
 /// The second lane a new setup starts with: the platform's own sampler on
 /// macOS (following lane A's SF2), a recording elsewhere.
 fn reference_lane() -> Source {
-    if cfg!(target_os = "macos") { Source::MacSampler { path: None } } else { Source::Wav { path: None } }
+    if cfg!(target_os = "macos") { Source::mac_sampler(Sound::same_as_a()) } else { Source::Wav { path: None } }
 }
 
 fn system_is_japanese() -> bool {
@@ -188,8 +189,8 @@ pub struct StudioApp {
     pressed: Option<Press>,
     last_note: Option<(u8, u8)>,
     midi_sounding: Vec<u8>,
-    /// The SF2 and settings the live synthesizer was made for.
-    live_for: Option<(PathBuf, SynthTuning)>,
+    /// The lane source the live synthesizer was made for.
+    live_for: Option<Source>,
     midi_in: MidiIn,
     midi_ports: Vec<String>,
     /// Show the whole program once the lanes have rendered it.
@@ -240,7 +241,7 @@ impl StudioApp {
             app.add_lane(source);
         }
         if app.lanes.is_empty() {
-            app.add_lane(Source::Sf2 { path: None, tuning: SynthTuning::default() });
+            app.add_lane(Source::sf2synth(Sound::same_as_a()));
         }
         app
     }
@@ -258,19 +259,16 @@ impl StudioApp {
         self.render_lane(index);
     }
 
-    /// The SF2 of the first sf2synth lane, which macOS sampler lanes without
-    /// their own SF2 play.
-    fn shared_sf2(&self) -> Option<PathBuf> {
-        self.lanes.iter().find_map(|l| match &l.source {
-            Source::Sf2 { path: Some(path), .. } => Some(path.clone()),
-            _ => None,
-        })
-    }
-
-    /// The lane's source with a followed SF2 filled in.
+    /// The lane's source with "same as A" replaced by lane A's sound.
     fn effective_source(&self, index: usize) -> Source {
         match &self.lanes[index].source {
-            Source::MacSampler { path: None } => Source::MacSampler { path: self.shared_sf2() },
+            Source::Synth { engine, sound, tuning } if sound.file == SoundFile::SameAsA => {
+                let sound = match self.lanes.first().map(|l| &l.source) {
+                    Some(Source::Synth { sound: a, .. }) if index > 0 && a.file != SoundFile::SameAsA => a.clone(),
+                    _ => sound.clone(),
+                };
+                Source::Synth { engine: *engine, sound, tuning: tuning.clone() }
+            }
             source => source.clone(),
         }
     }
@@ -661,111 +659,213 @@ impl StudioApp {
         let mut rerender = Vec::new();
         let gains = self.gains();
         let japanese = self.japanese;
-        let shared = self.shared_sf2();
+        let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
+        let shared = self.lanes.first().and_then(|l| match &l.source {
+            Source::Synth { sound, .. } => sound.file.path(),
+            Source::Wav { .. } => None,
+        });
         for i in 0..self.lanes.len() {
+            // The presets of the lane's file, for the preset menu.
+            let effective = self.effective_source(i);
+            let presets: Vec<(u16, u8, String)> = match &effective {
+                Source::Synth { engine: Engine::Sf2synth, sound, .. } => sound
+                    .file
+                    .path()
+                    .filter(|p| !is_dls(p))
+                    .and_then(|p| self.renderer.font(&p).ok())
+                    .map(|font| {
+                        let mut list: Vec<(u16, u8, String)> = font
+                            .presets()
+                            .iter()
+                            .map(|p| (p.bank(), p.program() as u8, p.name().to_string()))
+                            .collect();
+                        list.sort();
+                        list
+                    })
+                    .unwrap_or_default(),
+                Source::Synth { .. } => {
+                    let mut list: Vec<(u16, u8, String)> =
+                        gm::PROGRAMS.iter().enumerate().map(|(p, n)| (0, p as u8, n.to_string())).collect();
+                    list.push((128, 0, "Drums".to_string()));
+                    list
+                }
+                Source::Wav { .. } => Vec::new(),
+            };
             let lane = &mut self.lanes[i];
             egui::Frame::group(ui.style()).stroke(Stroke::new(1.0, LANE_COLORS[i].gamma_multiply(0.6))).show(
                 ui,
                 |ui| {
+                    // Synthesizer.
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(lane_letter(i)).color(LANE_COLORS[i]).strong().size(18.0));
-                        let mut kinds = vec![(0, "sf2synth + SF2")];
+                        let mut kinds = vec![(0, "sf2synth")];
                         if cfg!(target_os = "macos") {
-                            kinds.push((1, if japanese { "Mac 標準 + SF2" } else { "macOS sampler + SF2" }));
+                            kinds.push((1, t("macOS sampler", "Mac 標準")));
                         }
-                        kinds.push((2, if japanese { "WAV ファイル" } else { "WAV file" }));
-                        let kind = match lane.source {
-                            Source::Sf2 { .. } => 0,
-                            Source::MacSampler { .. } => 1,
+                        kinds.push((2, t("WAV recording", "WAV（録音）")));
+                        let kind = match &lane.source {
+                            Source::Synth { engine: Engine::Sf2synth, .. } => 0,
+                            Source::Synth { engine: Engine::MacSampler, .. } => 1,
                             Source::Wav { .. } => 2,
                         };
-                        egui::ComboBox::from_id_salt(("kind", lane.id))
-                            .width(150.0)
-                            .selected_text(kinds.iter().find(|(k, _)| *k == kind).map_or("", |(_, n)| n))
+                        ui.label(t("Synth", "シンセ"));
+                        egui::ComboBox::from_id_salt(("engine", lane.id))
+                            .width(120.0)
+                            .selected_text(kinds.iter().find(|(k, _)| *k == kind).map_or("", |(_, n)| *n))
                             .show_ui(ui, |ui| {
                                 for &(k, name) in &kinds {
                                     if ui.selectable_label(k == kind, name).clicked() && k != kind {
-                                        let path = lane.source.path().map(|p| p.to_path_buf());
-                                        let sf2 = path
-                                            .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("sf2")));
+                                        let sound = match &lane.source {
+                                            Source::Synth { sound, .. } => sound.clone(),
+                                            Source::Wav { .. } => Sound::same_as_a(),
+                                        };
                                         lane.source = match k {
-                                            0 => Source::Sf2 { path: sf2, tuning: SynthTuning::default() },
-                                            1 => Source::MacSampler { path: None },
+                                            0 => Source::sf2synth(sound),
+                                            1 => Source::mac_sampler(sound),
                                             _ => Source::Wav { path: None },
                                         };
                                         rerender.push(i);
                                     }
                                 }
                             });
-                        if ui
-                            .small_button("×")
-                            .on_hover_text(if japanese { "レーンを削除" } else { "Remove the lane" })
-                            .clicked()
-                        {
+                        if ui.small_button("×").on_hover_text(t("Remove the lane", "レーンを削除")).clicked() {
                             remove = Some(i);
                         }
                     });
-                    let is_wav = matches!(lane.source, Source::Wav { .. });
-                    let follows = matches!(lane.source, Source::MacSampler { path: None });
-                    let label = lane
-                        .source
-                        .path()
-                        .map(file_name)
-                        .or_else(|| {
-                            follows.then(|| {
-                                let name = shared.as_deref().map(file_name).unwrap_or_default();
-                                if japanese {
-                                    format!("A と同じ SF2（{name}）")
-                                } else {
-                                    format!("Same SF2 as A ({name})")
-                                }
-                            })
-                        })
-                        .unwrap_or_else(|| {
-                            (if is_wav {
-                                if japanese { "WAV を選ぶ…" } else { "Choose a WAV…" }
-                            } else if japanese {
-                                "SF2 を選ぶ…"
-                            } else {
-                                "Choose an SF2…"
-                            })
-                            .to_string()
-                        });
-                    if ui.button(label).clicked() {
-                        let dialog = if is_wav {
-                            rfd::FileDialog::new().add_filter("WAV", &["wav"])
-                        } else {
-                            rfd::FileDialog::new().add_filter("SF2", &["sf2"])
-                        };
-                        if let Some(path) = dialog.pick_file() {
-                            match &mut lane.source {
-                                Source::Sf2 { path: p, .. }
-                                | Source::MacSampler { path: p }
-                                | Source::Wav { path: p } => {
-                                    *p = Some(path.clone());
+
+                    match &mut lane.source {
+                        Source::Synth { engine, sound, .. } => {
+                            // Instrument file.
+                            ui.horizontal(|ui| {
+                                ui.label(t("Sound", "音源"));
+                                let current = match &sound.file {
+                                    SoundFile::SameAsA if i == 0 => t("Choose…", "選んでください").to_string(),
+                                    SoundFile::SameAsA => {
+                                        let name = shared.as_deref().map(file_name).unwrap_or_default();
+                                        if japanese {
+                                            format!("A と同じ（{name}）")
+                                        } else {
+                                            format!("Same as A ({name})")
+                                        }
+                                    }
+                                    SoundFile::File(path) => file_name(path),
+                                    SoundFile::MacBuiltIn => t("macOS built-in GS", "Mac 内蔵 GS 音源").to_string(),
+                                };
+                                egui::ComboBox::from_id_salt(("sound", lane.id))
+                                    .width(170.0)
+                                    .selected_text(current)
+                                    .show_ui(ui, |ui| {
+                                        if i > 0
+                                            && ui
+                                                .selectable_label(
+                                                    sound.file == SoundFile::SameAsA,
+                                                    t("Same as lane A", "A と同じ"),
+                                                )
+                                                .clicked()
+                                        {
+                                            sound.file = SoundFile::SameAsA;
+                                            rerender.push(i);
+                                        }
+                                        if ui
+                                            .selectable_label(
+                                                false,
+                                                t("Choose a file (SF2 / DLS)…", "ファイルを選ぶ（SF2 / DLS）…"),
+                                            )
+                                            .clicked()
+                                        {
+                                            if let Some(path) = rfd::FileDialog::new()
+                                                .add_filter("SF2 / DLS", &["sf2", "dls"])
+                                                .pick_file()
+                                            {
+                                                self.renderer.forget_font(&path);
+                                                sound.file = SoundFile::File(path);
+                                                sound.bank = 0;
+                                                sound.program = 0;
+                                                rerender.push(i);
+                                            }
+                                        }
+                                        if cfg!(target_os = "macos")
+                                            && ui
+                                                .selectable_label(
+                                                    sound.file == SoundFile::MacBuiltIn,
+                                                    t("macOS built-in GS (DLS)", "Mac 内蔵 GS 音源（DLS）"),
+                                                )
+                                                .clicked()
+                                        {
+                                            sound.file = SoundFile::MacBuiltIn;
+                                            sound.bank = 0;
+                                            sound.program = 0;
+                                            rerender.push(i);
+                                        }
+                                    });
+                            });
+                            // Preset in the file.
+                            if sound.file != SoundFile::SameAsA && !presets.is_empty() {
+                                ui.horizontal(|ui| {
+                                    ui.label(t("Preset", "音色"));
+                                    let name = presets
+                                        .iter()
+                                        .find(|(b, p, _)| *b == sound.bank && *p == sound.program)
+                                        .map(|(b, p, n)| format!("{b}:{p} {n}"))
+                                        .unwrap_or_else(|| format!("{}:{}", sound.bank, sound.program));
+                                    egui::ComboBox::from_id_salt(("preset", lane.id))
+                                        .width(190.0)
+                                        .selected_text(name)
+                                        .show_ui(ui, |ui| {
+                                            for (b, p, n) in &presets {
+                                                let selected = *b == sound.bank && *p == sound.program;
+                                                if ui.selectable_label(selected, format!("{b}:{p} {n}")).clicked()
+                                                    && !selected
+                                                {
+                                                    sound.bank = *b;
+                                                    sound.program = *p;
+                                                    rerender.push(i);
+                                                }
+                                            }
+                                        });
+                                });
+                            }
+                            if *engine == Engine::Sf2synth && effective.path().is_some_and(|p| is_dls(&p)) {
+                                ui.colored_label(
+                                    Color32::from_rgb(240, 190, 90),
+                                    t(
+                                        "sf2synth can't read DLS yet: choose the macOS sampler.",
+                                        "sf2synth はまだ DLS を読めません。シンセを Mac 標準にしてください。",
+                                    ),
+                                );
+                            }
+                        }
+                        Source::Wav { path } => {
+                            let label = path
+                                .as_deref()
+                                .map(file_name)
+                                .unwrap_or_else(|| t("Choose a WAV…", "WAV を選ぶ…").to_string());
+                            if ui.button(label).clicked() {
+                                if let Some(chosen) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).pick_file() {
+                                    *path = Some(chosen);
+                                    rerender.push(i);
                                 }
                             }
-                            self.renderer.forget_font(&path);
-                            rerender.push(i);
                         }
                     }
+
                     if lane.rendering {
                         ui.horizontal(|ui| {
                             ui.spinner();
-                            ui.label(if japanese { "書き出し中…" } else { "Rendering…" });
+                            ui.label(t("Rendering…", "書き出し中…"));
                         });
                     } else if let Some(error) = &lane.error {
                         ui.colored_label(Color32::LIGHT_RED, error);
                     } else if let Some(analysis) = &lane.analysis {
                         ui.weak(format!(
                             "{} {:.1} dB · {} {:.1} dB · {} {:+.1} dB · {} {:.0} Hz",
-                            if japanese { "音量" } else { "level" },
+                            t("level", "音量"),
                             to_db(analysis.loudness),
-                            if japanese { "ピーク" } else { "peak" },
+                            t("peak", "ピーク"),
                             to_db(analysis.peak),
-                            if japanese { "補正" } else { "gain" },
+                            t("gain", "補正"),
                             to_db(gains[i]),
-                            if japanese { "明るさ" } else { "brightness" },
+                            t("brightness", "明るさ"),
                             analysis.brightness_hz(),
                         ));
                     }
@@ -782,10 +882,11 @@ impl StudioApp {
                 self.sync_player();
             }
         }
-        // macOS sampler lanes following an sf2synth lane's SF2 follow its changes.
-        if rerender.iter().any(|&i| matches!(self.lanes.get(i).map(|l| &l.source), Some(Source::Sf2 { .. }))) {
-            for (i, lane) in self.lanes.iter().enumerate() {
-                if matches!(lane.source, Source::MacSampler { path: None }) && !rerender.contains(&i) {
+        // Lanes playing lane A's sound follow its changes.
+        if rerender.contains(&0) {
+            for (i, lane) in self.lanes.iter().enumerate().skip(1) {
+                let follows = matches!(&lane.source, Source::Synth { sound, .. } if sound.file == SoundFile::SameAsA);
+                if follows && !rerender.contains(&i) {
                     rerender.push(i);
                 }
             }
@@ -794,12 +895,7 @@ impl StudioApp {
             self.render_lane(i);
         }
         if self.lanes.len() < MAX_LANES && ui.button(self.t("+ Add lane", "+ レーンを追加")).clicked() {
-            let source = self
-                .lanes
-                .last()
-                .map(|l| l.source.clone())
-                .unwrap_or(Source::Sf2 { path: None, tuning: SynthTuning::default() });
-            self.add_lane(source);
+            self.add_lane(Source::sf2synth(Sound::same_as_a()));
         }
     }
 
@@ -809,7 +905,7 @@ impl StudioApp {
         ui.strong(self.t("sf2synth settings", "sf2synth の設定"));
         let Some(lane) = self.lanes.get_mut(current) else { return };
         let id = lane.id;
-        let Source::Sf2 { tuning, .. } = &mut lane.source else {
+        let Source::Synth { engine: Engine::Sf2synth, tuning, .. } = &mut lane.source else {
             ui.label(if japanese {
                 "いま再生中のレーンは sf2synth ではありません。sf2synth のレーンに切り替えると設定できます。"
             } else {
@@ -913,19 +1009,26 @@ impl StudioApp {
     /// Keeps the live synthesizer in step with the focused lane (Tune mode,
     /// sf2synth lanes only).
     fn ensure_live(&mut self) {
-        let wanted = match (self.mode, self.lanes.get(self.focus).map(|l| &l.source)) {
-            (Mode::Tune, Some(Source::Sf2 { path: Some(path), tuning })) => Some((path.clone(), tuning.clone())),
+        let wanted = match (self.mode, self.focus < self.lanes.len()) {
+            (Mode::Tune, true) => match self.effective_source(self.focus) {
+                source @ Source::Synth { engine: Engine::Sf2synth, .. }
+                    if source.path().is_some_and(|p| !is_dls(&p)) =>
+                {
+                    Some(source)
+                }
+                _ => None,
+            },
             _ => None,
         };
         if wanted == self.live_for {
             return;
         }
         self.live_for = wanted.clone();
-        let synth = wanted.and_then(|(path, tuning)| {
-            let font = self.renderer.font(&path).ok()?;
+        let synth = wanted.and_then(|source| {
+            let Source::Synth { sound, tuning, .. } = &source else { return None };
+            let font = self.renderer.font(&source.path()?).ok()?;
             let mut synth = Synthesizer::new(font, &tuning.settings(self.sample_rate)).ok()?;
-            synth.control_change(0, 91, tuning.reverb_send);
-            synth.control_change(0, 93, tuning.chorus_send);
+            crate::render::prepare_synth(&mut synth, tuning, sound);
             Some(synth)
         });
         let gain = self.gains().get(self.focus).copied().unwrap_or(1.0);
@@ -1293,10 +1396,10 @@ impl StudioApp {
         let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 18.0));
         let body = Rect::from_min_max(Pos2::new(rect.left(), header.bottom()), rect.max);
         painter.rect_filled(header, 0.0, if heard { color.gamma_multiply(0.35) } else { Color32::from_gray(30) });
-        let lane = &mut self.lanes[index];
-        let source = match &lane.source {
-            Source::Sf2 { .. } => "sf2synth",
-            Source::MacSampler { .. } => {
+        let effective = self.effective_source(index);
+        let source = match &effective {
+            Source::Synth { engine: Engine::Sf2synth, .. } => "sf2synth",
+            Source::Synth { engine: Engine::MacSampler, .. } => {
                 if self.japanese {
                     "Mac 標準"
                 } else {
@@ -1305,7 +1408,17 @@ impl StudioApp {
             }
             Source::Wav { .. } => "WAV",
         };
-        let name = lane.source.path().map(file_name).unwrap_or_default();
+        let name = match &effective {
+            Source::Synth { sound, .. } => {
+                let file = match &sound.file {
+                    SoundFile::MacBuiltIn => "GS (built-in)".to_string(),
+                    file => file.path().as_deref().map(file_name).unwrap_or_default(),
+                };
+                format!("{file} · {}:{}", sound.bank, sound.program)
+            }
+            Source::Wav { path } => path.as_deref().map(file_name).unwrap_or_default(),
+        };
+        let lane = &mut self.lanes[index];
         let speaker = if heard { "🔊" } else { "🔈" };
         let marker = if focused { "▶" } else { " " };
         painter.text(
@@ -1526,36 +1639,55 @@ impl eframe::App for StudioApp {
 }
 
 /// Command-line arguments replace the saved lanes and program:
-/// `--sf2 <file>`, `--mac <file>`, `--wav <file>` (one lane each, in order),
-/// `--midi <file>`, `--mode create|tune|compare`.
+/// `--sf2 <file>`, `--mac <file>`, `--mac-builtin`, `--wav <file>` (one lane
+/// each, in order), `--midi <file>`, `--mode create|tune|compare`.
 fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
     let arguments: Vec<String> = arguments.collect();
     let mut lanes = Vec::new();
     let mut i = 0;
-    while i + 1 < arguments.len() {
-        let value = PathBuf::from(&arguments[i + 1]);
-        match arguments[i].as_str() {
-            "--sf2" => lanes.push(Source::Sf2 { path: Some(value), tuning: SynthTuning::default() }),
-            "--mac" => lanes.push(Source::MacSampler { path: Some(value) }),
-            "--wav" => lanes.push(Source::Wav { path: Some(value) }),
-            "--midi" => saved.program = Program::Midi(value),
-            "--mode" => {
-                saved.mode = match arguments[i + 1].as_str() {
-                    "create" => Mode::Create,
-                    "tune" => Mode::Tune,
+    while i < arguments.len() {
+        let value = arguments.get(i + 1).map(PathBuf::from);
+        let file = |value: &Option<PathBuf>| value.clone().map(SoundFile::File);
+        let used = match (arguments[i].as_str(), &value) {
+            ("--sf2", Some(_)) => {
+                lanes.push(Source::sf2synth(Sound { file: file(&value).unwrap(), bank: 0, program: 0 }));
+                2
+            }
+            ("--mac", Some(_)) => {
+                lanes.push(Source::mac_sampler(Sound { file: file(&value).unwrap(), bank: 0, program: 0 }));
+                2
+            }
+            ("--mac-builtin", _) => {
+                lanes.push(Source::mac_sampler(Sound { file: SoundFile::MacBuiltIn, bank: 0, program: 0 }));
+                1
+            }
+            ("--wav", Some(path)) => {
+                lanes.push(Source::Wav { path: Some(path.clone()) });
+                2
+            }
+            ("--midi", Some(path)) => {
+                saved.program = Program::Midi(path.clone());
+                2
+            }
+            ("--mode", Some(mode)) => {
+                saved.mode = match mode.to_str() {
+                    Some("create") => Mode::Create,
+                    Some("tune") => Mode::Tune,
                     _ => Mode::Compare,
-                }
+                };
+                2
             }
-            _ => {
-                i += 1;
-                continue;
-            }
-        }
-        i += 2;
+            _ => 1,
+        };
+        i += used;
     }
     if !lanes.is_empty() {
         saved.lanes = lanes;
     }
+}
+
+fn is_dls(path: &std::path::Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dls"))
 }
 
 fn lane_letter(index: usize) -> char {

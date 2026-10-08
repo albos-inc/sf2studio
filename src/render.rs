@@ -12,23 +12,83 @@ use crate::analysis::{Analysis, Rendered};
 use crate::patterns::TestPattern;
 use crate::tuning::SynthTuning;
 
+/// The synthesizer a lane plays with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Engine {
+    Sf2synth,
+    /// macOS's own sampler (AVAudioUnitSampler).
+    MacSampler,
+}
+
+/// The instrument file a synthesizer plays.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum SoundFile {
+    /// The file of lane A.
+    SameAsA,
+    /// An SF2 (or DLS) file.
+    File(PathBuf),
+    /// macOS's built-in General MIDI set (Roland GS, DLS).
+    MacBuiltIn,
+}
+
+/// macOS's built-in General MIDI instruments.
+pub const MAC_BUILT_IN_DLS: &str =
+    "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls";
+
+impl SoundFile {
+    /// The file, when it doesn't depend on another lane.
+    pub fn path(&self) -> Option<PathBuf> {
+        match self {
+            SoundFile::SameAsA => None,
+            SoundFile::File(path) => Some(path.clone()),
+            SoundFile::MacBuiltIn => Some(PathBuf::from(MAC_BUILT_IN_DLS)),
+        }
+    }
+}
+
+/// An instrument file and the preset in it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Sound {
+    pub file: SoundFile,
+    pub bank: u16,
+    pub program: u8,
+}
+
+impl Sound {
+    pub fn same_as_a() -> Sound {
+        Sound { file: SoundFile::SameAsA, bank: 0, program: 0 }
+    }
+}
+
 /// Where a lane's sound comes from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Source {
-    /// sf2synth playing an SF2 file.
-    Sf2 { path: Option<PathBuf>, tuning: SynthTuning },
+    /// A synthesizer playing an instrument file.
+    Synth { engine: Engine, sound: Sound, tuning: SynthTuning },
     /// A recording, played as it is.
     Wav { path: Option<PathBuf> },
-    /// macOS's own sampler (AVAudioUnitSampler) playing an SF2 file.
-    MacSampler { path: Option<PathBuf> },
 }
 
 impl Source {
-    pub fn path(&self) -> Option<&Path> {
+    pub fn sf2synth(sound: Sound) -> Source {
+        Source::Synth { engine: Engine::Sf2synth, sound, tuning: SynthTuning::default() }
+    }
+
+    pub fn mac_sampler(sound: Sound) -> Source {
+        Source::Synth { engine: Engine::MacSampler, sound, tuning: SynthTuning::default() }
+    }
+
+    /// The file played, when it doesn't depend on another lane.
+    pub fn path(&self) -> Option<PathBuf> {
         match self {
-            Source::Sf2 { path, .. } | Source::Wav { path } | Source::MacSampler { path } => path.as_deref(),
+            Source::Synth { sound, .. } => sound.file.path(),
+            Source::Wav { path } => path.clone(),
         }
     }
+}
+
+fn is_dls(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dls"))
 }
 
 /// What the lanes play.
@@ -112,16 +172,26 @@ impl Renderer {
 
 fn run(job: &Job, fonts: &Mutex<HashMap<PathBuf, Arc<SoundFont>>>) -> Result<(Arc<Rendered>, Arc<Analysis>), String> {
     let rendered = match &job.source {
-        Source::Sf2 { path, tuning } => {
-            let path = path.as_ref().ok_or("no SF2 file")?;
-            let font = load_font(path, fonts)?;
-            render_sf2(font, tuning, &job.program, job.sample_rate)?
+        Source::Synth { engine, sound, tuning } => {
+            let path = sound.file.path().ok_or("no instrument file")?;
+            match engine {
+                Engine::Sf2synth => {
+                    if is_dls(&path) {
+                        return Err("sf2synth can't read DLS files yet. Use the macOS sampler.".into());
+                    }
+                    let font = load_font(&path, fonts)?;
+                    render_sf2(font, tuning, sound, &job.program, job.sample_rate)?
+                }
+                Engine::MacSampler => crate::mac_sampler::render(
+                    &path,
+                    sound.bank,
+                    sound.program,
+                    &job.program.midi_bytes()?,
+                    job.sample_rate,
+                )?,
+            }
         }
         Source::Wav { path } => load_wav(path.as_ref().ok_or("no WAV file")?, job.sample_rate)?,
-        Source::MacSampler { path } => {
-            let path = path.as_ref().ok_or("no SF2 file")?;
-            crate::mac_sampler::render(path, &job.program.midi_bytes()?, job.sample_rate)?
-        }
     };
     let analysis = Analysis::new(&rendered);
     Ok((Arc::new(rendered), Arc::new(analysis)))
@@ -145,15 +215,13 @@ const TAIL_SECONDS: f64 = 3.0;
 pub fn render_sf2(
     font: Arc<SoundFont>,
     tuning: &SynthTuning,
+    sound: &Sound,
     program: &Program,
     sample_rate: u32,
 ) -> Result<Rendered, String> {
     let midi = Arc::new(MidiFile::from_bytes(&program.midi_bytes()?).map_err(|e| e.to_string())?);
     let mut synth = Synthesizer::new(font, &tuning.settings(sample_rate)).map_err(|e| e.to_string())?;
-    for channel in 0..16 {
-        synth.control_change(channel, 91, tuning.reverb_send);
-        synth.control_change(channel, 93, tuning.chorus_send);
-    }
+    prepare_synth(&mut synth, tuning, sound);
     let mut sequencer = Sequencer::new(sample_rate);
     sequencer.load(Arc::clone(&midi));
     sequencer.play();
@@ -168,6 +236,19 @@ pub fn render_sf2(
         position = end;
     }
     Ok(Rendered { sample_rate, left, right })
+}
+
+/// Selects the lane's preset on every melodic channel (the program's own
+/// program changes still apply) and sets the effect sends.
+pub fn prepare_synth(synth: &mut Synthesizer, tuning: &SynthTuning, sound: &Sound) {
+    for channel in 0..16 {
+        if channel != 9 {
+            synth.control_change(channel, 0, sound.bank.min(127) as u8);
+            synth.program_change(channel, sound.program);
+        }
+        synth.control_change(channel, 91, tuning.reverb_send);
+        synth.control_change(channel, 93, tuning.chorus_send);
+    }
 }
 
 /// A WAV file as stereo at `sample_rate` (cubic resampling).

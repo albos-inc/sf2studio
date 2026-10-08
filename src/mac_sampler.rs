@@ -11,7 +11,7 @@ const TAIL_SECONDS: f64 = 3.0;
 
 /// Renders `midi` with the SF2 at `font` through AVAudioUnitSampler.
 #[cfg(target_os = "macos")]
-pub fn render(font: &Path, midi: &[u8], sample_rate: u32) -> Result<Rendered, String> {
+pub fn render(font: &Path, bank: u16, program: u8, midi: &[u8], sample_rate: u32) -> Result<Rendered, String> {
     use objc2::rc::Retained;
     use objc2::{AnyThread, msg_send};
     use objc2_avf_audio::{
@@ -23,6 +23,10 @@ pub fn render(font: &Path, midi: &[u8], sample_rate: u32) -> Result<Rendered, St
     fn describe(error: Retained<NSError>) -> String {
         error.localizedDescription().to_string()
     }
+
+    // AVAudioEngine crashes when two offline renders run at once: one at a time.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
 
     let duration = sf2synth::MidiFile::from_bytes(midi).map_err(|e| e.to_string())?.duration();
     let total = ((duration + TAIL_SECONDS) * sample_rate as f64) as usize;
@@ -46,7 +50,12 @@ pub fn render(font: &Path, midi: &[u8], sample_rate: u32) -> Result<Rendered, St
         let sampler = AVAudioUnitSampler::new();
         engine.attachNode(&sampler);
         engine.connect_to_format(&sampler, &engine.mainMixerNode(), None);
-        sampler.loadSoundBankInstrumentAtURL_program_bankMSB_bankLSB_error(&url, 0, 0x79, 0).map_err(describe)?;
+        // Bank 128 is percussion (MSB 0x78); others are melodic (0x79) with the
+        // bank as the LSB.
+        let (msb, lsb) = if bank == 128 { (0x78, 0) } else { (0x79, bank.min(127) as u8) };
+        sampler
+            .loadSoundBankInstrumentAtURL_program_bankMSB_bankLSB_error(&url, program, msb, lsb)
+            .map_err(describe)?;
 
         let sequencer = AVAudioSequencer::initWithAudioEngine(AVAudioSequencer::alloc(), &engine);
         sequencer
@@ -88,7 +97,7 @@ pub fn render(font: &Path, midi: &[u8], sample_rate: u32) -> Result<Rendered, St
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn render(_font: &Path, _midi: &[u8], _sample_rate: u32) -> Result<Rendered, String> {
+pub fn render(_font: &Path, _bank: u16, _program: u8, _midi: &[u8], _sample_rate: u32) -> Result<Rendered, String> {
     Err("The macOS sampler is only available on macOS.".into())
 }
 
@@ -99,8 +108,20 @@ mod tests {
     fn renders_a_note_through_the_macos_sampler() {
         let Ok(font) = std::env::var("SF2STUDIO_TEST_SF2") else { return };
         let midi = crate::patterns::single_note(60, 100, 1.0);
-        let audio = super::render(std::path::Path::new(&font), &midi, 48_000).unwrap();
+        let audio = super::render(std::path::Path::new(&font), 0, 0, &midi, 48_000).unwrap();
         assert!(audio.duration() > 3.5);
+        let peak = audio.left.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
+        assert!(peak > 0.01, "silent: peak {peak}");
+    }
+
+    #[test]
+    fn renders_the_built_in_gs_piano() {
+        let path = std::path::Path::new(crate::render::MAC_BUILT_IN_DLS);
+        if !path.exists() {
+            return;
+        }
+        let midi = crate::patterns::single_note(60, 100, 0.5);
+        let audio = super::render(path, 0, 0, &midi, 48_000).unwrap();
         let peak = audio.left.iter().fold(0.0f32, |m, &x| m.max(x.abs()));
         assert!(peak > 0.01, "silent: peak {peak}");
     }
