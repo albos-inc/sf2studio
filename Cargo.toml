@@ -14,14 +14,17 @@ categories = ["multimedia::audio"]
 [dependencies]
 cpal = "0.18.2"
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui-phosphor = "0.14"
 egui_plot = "0.37"
 hound = "3.5.1"
 midir = "0.11.0"
 realfft = "3.5.0"
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 sf2synth = { git = "https://github.com/albos-inc/sf2synth", branch = "main" }
 toml = "1.1.6"
+ureq = { version = "3.4.2", default-features = false, features = ["native-tls", "gzip"] }
 
 [profile.release]
 debug = 1

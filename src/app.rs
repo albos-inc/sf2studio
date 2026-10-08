@@ -5,14 +5,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align2, Color32, ColorImage, FontData, FontFamily, FontId, Key, Pos2, Rect, Sense, Shape, Stroke,
-    TextureHandle, TextureOptions, Vec2,
-    epaint::text::{FontInsert, FontPriority, InsertFontFamily},
+    self, Align2, Color32, ColorImage, FontId, Key, Pos2, Rect, Sense, Shape, Stroke, TextureHandle, TextureOptions,
+    Vec2,
 };
 use serde::{Deserialize, Serialize};
 
 use sf2synth::Synthesizer;
 
+mod chrome;
 mod create_ui;
 
 use crate::abx::Abx;
@@ -24,6 +24,7 @@ use crate::measure::{self, DECAY_DB, Note, NoteMeasure};
 use crate::midi_in::MidiIn;
 use crate::patterns::{NOTE_START, TestPattern, key_hz, key_name};
 use crate::render::{Engine, Job, Program, Renderer, Sound, SoundFile, Source};
+use crate::theme::{icon, labeled};
 use crate::tuning::{SynthTuning, VelocityCurve};
 
 const MAX_LANES: usize = 9;
@@ -65,6 +66,7 @@ struct Saved {
     keyboard: KeyboardSettings,
     origin: crate::create::Origin,
     voicing: crate::create::Voicing,
+    theme: crate::theme::ThemeChoice,
 }
 
 /// How the on-screen keyboard plays.
@@ -125,6 +127,7 @@ impl Default for Saved {
             keyboard: KeyboardSettings::default(),
             origin: crate::create::Origin::default(),
             voicing: crate::create::Voicing::default(),
+            theme: crate::theme::ThemeChoice::default(),
         }
     }
 }
@@ -230,12 +233,13 @@ pub struct StudioApp {
     create: create_ui::CreateState,
     /// The generation of the created instrument the live synthesizer plays.
     live_created: Option<u64>,
+    chrome: chrome::Chrome,
+    theme: crate::theme::ThemeChoice,
 }
 
 impl StudioApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> StudioApp {
-        install_fonts(&cc.egui_ctx);
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        crate::theme::install(&cc.egui_ctx);
         let mut saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
         apply_arguments(&mut saved, std::env::args().skip(1));
         let (player, player_error) = match Player::new() {
@@ -275,7 +279,19 @@ impl StudioApp {
             abx: Abx::new(),
             create: create_ui::CreateState::new(saved.origin, saved.voicing),
             live_created: None,
+            chrome: chrome::Chrome::default(),
+            theme: saved.theme,
         };
+        app.theme.apply(&cc.egui_ctx);
+        // `--show help|about|updates` opens that window at launch.
+        let arguments: Vec<String> = std::env::args().collect();
+        if let Some(i) = arguments.iter().position(|a| a == "--show") {
+            match arguments.get(i + 1).map(String::as_str) {
+                Some("help") => app.chrome.help = true,
+                Some("about") => app.chrome.about = true,
+                _ => {}
+            }
+        }
         for source in saved.lanes.into_iter().take(MAX_LANES) {
             app.add_lane(source);
         }
@@ -564,50 +580,28 @@ impl StudioApp {
 
     // MARK: - Panels
 
-    fn top_bar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading("sf2studio");
-            ui.add_space(16.0);
-            for (mode, english, japanese) in
-                [(Mode::Create, "Create", "作成"), (Mode::Tune, "Tune", "調整再生"), (Mode::Compare, "Compare", "比較")]
-            {
-                let label = egui::RichText::new(if self.japanese { japanese } else { english }).size(15.0);
-                if ui.add(egui::Button::selectable(self.mode == mode, label).min_size(Vec2::new(96.0, 28.0))).clicked()
-                {
-                    self.set_mode(mode);
-                }
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.selectable_label(self.japanese, "日本語").clicked() {
-                    self.japanese = true;
-                }
-                if ui.selectable_label(!self.japanese, "English").clicked() {
-                    self.japanese = false;
-                }
-                if let Some(error) = &self.player_error {
-                    ui.colored_label(Color32::LIGHT_RED, format!("audio: {error}"));
-                }
-            });
-        });
-    }
-
     fn transport_bar(&mut self, ui: &mut egui::Ui) {
         let playing = self.is_playing();
         let position = self.position_seconds();
         let duration = self.duration();
         ui.horizontal(|ui| {
-            let play = if playing { self.t("⏸ Pause", "⏸ 一時停止") } else { self.t("▶ Play", "▶ 再生") };
+            let play = if playing {
+                labeled(icon::PAUSE, self.t("Pause", "一時停止"))
+            } else {
+                labeled(icon::PLAY, self.t("Play", "再生"))
+            };
             if ui.add(egui::Button::new(play).min_size(Vec2::new(96.0, 28.0))).clicked() {
                 self.toggle_play();
             }
-            if ui.button("⏮").on_hover_text(self.t("To the start (Home)", "先頭へ（Home）")).clicked() {
+            if ui.button(icon::SKIP_BACK).on_hover_text(self.t("To the start (Home)", "先頭へ（Home）")).clicked()
+            {
                 self.seek(0.0);
             }
             ui.monospace(format!("{} / {}", clock(position), clock(duration)));
             ui.separator();
             if self.mode == Mode::Compare {
                 let blind = self.t("Blind test", "ブラインドテスト");
-                ui.toggle_value(&mut self.abx.open, blind);
+                ui.toggle_value(&mut self.abx.open, labeled(icon::EYE_SLASH, blind));
             }
             if self.concealed() {
                 ui.label(self.t(
@@ -657,8 +651,8 @@ impl StudioApp {
             let looping = self.with_transport(|t| t.loop_range).flatten();
             if let Some((start, end)) = looping {
                 let rate = self.sample_rate as f64;
-                ui.label(format!("🔁 {}–{}", clock(start as f64 / rate), clock(end as f64 / rate)));
-                if ui.small_button("×").clicked() {
+                ui.label(format!("{}  {}–{}", icon::REPEAT, clock(start as f64 / rate), clock(end as f64 / rate)));
+                if ui.small_button(icon::X).clicked() {
                     self.with_transport(|t| t.loop_range = None);
                 }
             }
@@ -680,7 +674,7 @@ impl StudioApp {
     }
 
     fn program_ui(&mut self, ui: &mut egui::Ui) {
-        ui.strong(self.t("Play", "再生する内容"));
+        ui.label(crate::theme::section(self.t("Play", "再生する内容")));
         let mut changed = false;
         let japanese = self.japanese;
         let current_pattern = match &self.program {
@@ -704,7 +698,7 @@ impl StudioApp {
                     }
                 }
             });
-        if ui.button(self.t("Open MIDI file…", "MIDI ファイルを開く…")).clicked()
+        if ui.button(labeled(icon::MUSIC_NOTES, self.t("Open MIDI file…", "MIDI ファイルを開く…"))).clicked()
             && let Some(path) = rfd::FileDialog::new().add_filter("MIDI", &["mid", "midi", "kar", "rmi"]).pick_file()
         {
             self.program = Program::Midi(path);
@@ -720,7 +714,7 @@ impl StudioApp {
     }
 
     fn lanes_ui(&mut self, ui: &mut egui::Ui) {
-        ui.strong(self.t("Lanes", "レーン"));
+        ui.label(crate::theme::section(self.t("Lanes", "レーン")));
         let mut remove = None;
         let mut rerender = Vec::new();
         let gains = self.gains();
@@ -794,7 +788,8 @@ impl StudioApp {
                                     }
                                 }
                             });
-                        if ui.small_button("×").on_hover_text(t("Remove the lane", "レーンを削除")).clicked() {
+                        if ui.small_button(icon::X).on_hover_text(t("Remove the lane", "レーンを削除")).clicked()
+                        {
                             remove = Some(i);
                         }
                     });
@@ -958,7 +953,8 @@ impl StudioApp {
         for i in rerender {
             self.render_lane(i);
         }
-        if self.lanes.len() < MAX_LANES && ui.button(self.t("+ Add lane", "+ レーンを追加")).clicked() {
+        if self.lanes.len() < MAX_LANES && ui.button(labeled(icon::PLUS, self.t("Add lane", "レーンを追加"))).clicked()
+        {
             self.add_lane(Source::sf2synth(Sound::same_as_a()));
         }
     }
@@ -966,7 +962,7 @@ impl StudioApp {
     fn tuning_ui(&mut self, ui: &mut egui::Ui) {
         let current = self.focus;
         let japanese = self.japanese;
-        ui.strong(self.t("sf2synth settings", "sf2synth の設定"));
+        ui.label(crate::theme::section(self.t("sf2synth settings", "sf2synth の設定")));
         let Some(lane) = self.lanes.get_mut(current) else { return };
         let id = lane.id;
         let Source::Synth { engine: Engine::Sf2synth, tuning, .. } = &mut lane.source else {
@@ -1017,10 +1013,10 @@ impl StudioApp {
         ui.separator();
         let mut message = None;
         ui.horizontal(|ui| {
-            if ui.button(t("Reset", "初期値に戻す")).clicked() {
+            if ui.button(labeled(icon::ARROW_COUNTER_CLOCKWISE, t("Reset", "初期値に戻す"))).clicked() {
                 *tuning = SynthTuning::default();
             }
-            if ui.button(t("Save…", "保存…")).clicked()
+            if ui.button(labeled(icon::FLOPPY_DISK, t("Save…", "保存…"))).clicked()
                 && let Some(path) =
                     rfd::FileDialog::new().add_filter("TOML", &["toml"]).set_file_name("sf2synth.toml").save_file()
             {
@@ -1029,7 +1025,7 @@ impl StudioApp {
                     Err(e) => e.to_string(),
                 });
             }
-            if ui.button(t("Load…", "読み込む…")).clicked()
+            if ui.button(labeled(icon::FOLDER_OPEN, t("Load…", "読み込む…"))).clicked()
                 && let Some(path) = rfd::FileDialog::new().add_filter("TOML", &["toml"]).pick_file()
             {
                 match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| SynthTuning::from_toml(&s))
@@ -1191,7 +1187,7 @@ impl StudioApp {
         let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
         let live = self.live_for.is_some() || self.live_created.is_some();
         let creating = self.mode == Mode::Create;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let settings = &mut self.keyboard_settings;
             ui.checkbox(&mut settings.fixed_velocity, t("Fixed velocity", "強さを固定"));
             ui.add_enabled(settings.fixed_velocity, egui::Slider::new(&mut settings.velocity, 1..=127));
@@ -1349,7 +1345,7 @@ impl StudioApp {
         }
 
         ui.horizontal(|ui| {
-            ui.strong(t("Measurements", "計測"));
+            ui.label(crate::theme::section(t("Measurements", "計測")));
             ui.checkbox(&mut self.layers.relative, t("Relative to each key's maximum", "鍵ごとの最大を基準にする"));
             if sweeps.is_empty() && decays.is_empty() {
                 ui.weak(t(
@@ -1447,12 +1443,27 @@ impl StudioApp {
         let japanese = self.japanese;
         ui.horizontal(|ui| {
             ui.label(if japanese { "表示:" } else { "Show:" });
-            ui.toggle_value(&mut self.layers.spectrogram, if japanese { "スペクトログラム" } else { "Spectrogram" });
-            ui.toggle_value(&mut self.layers.envelope, if japanese { "音量推移 (dB)" } else { "Level (dB)" });
-            ui.toggle_value(&mut self.layers.closeup, if japanese { "拡大波形" } else { "Waveform close-up" });
-            ui.toggle_value(&mut self.layers.piano_roll, if japanese { "ピアノロール" } else { "Piano roll" });
+            ui.toggle_value(
+                &mut self.layers.spectrogram,
+                labeled(icon::RAINBOW, if japanese { "スペクトログラム" } else { "Spectrogram" }),
+            );
+            ui.toggle_value(
+                &mut self.layers.envelope,
+                labeled(icon::CHART_LINE, if japanese { "音量推移 (dB)" } else { "Level (dB)" }),
+            );
+            ui.toggle_value(
+                &mut self.layers.closeup,
+                labeled(icon::WAVEFORM, if japanese { "拡大波形" } else { "Waveform close-up" }),
+            );
+            ui.toggle_value(
+                &mut self.layers.piano_roll,
+                labeled(icon::PIANO_KEYS, if japanese { "ピアノロール" } else { "Piano roll" }),
+            );
             if self.mode == Mode::Compare {
-                ui.toggle_value(&mut self.layers.measure, if japanese { "計測グラフ" } else { "Measurements" });
+                ui.toggle_value(
+                    &mut self.layers.measure,
+                    labeled(icon::CHART_SCATTER, if japanese { "計測グラフ" } else { "Measurements" }),
+                );
             }
         });
     }
@@ -1942,6 +1953,7 @@ impl eframe::App for StudioApp {
             Mode::Tune | Mode::Compare => self.timeline(ui),
         });
         self.poll_create(ui.ctx());
+        self.chrome_windows(ui.ctx());
         if self.is_playing()
             || self.create.busy()
             || self.pending_render.is_some()
@@ -1963,6 +1975,7 @@ impl eframe::App for StudioApp {
             keyboard: self.keyboard_settings,
             origin: self.create.origin.clone(),
             voicing: self.create.voicing.clone(),
+            theme: self.theme,
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
     }
@@ -1970,7 +1983,8 @@ impl eframe::App for StudioApp {
 
 /// Command-line arguments replace the saved lanes and program:
 /// `--sf2 <file>`, `--mac <file>`, `--mac-builtin`, `--wav <file>` (one lane
-/// each, in order), `--midi <file>`, `--mode create|tune|compare`.
+/// each, in order), `--midi <file>`, `--mode create|tune|compare`,
+/// `--create <sf2>`, `--theme light|dark|system`.
 fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
     let arguments: Vec<String> = arguments.collect();
     let mut lanes = Vec::new();
@@ -1998,6 +2012,14 @@ fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
             ("--create", Some(path)) => {
                 saved.origin = crate::create::Origin::Sf2 { path: Some(path.clone()), bank: 0, program: 0 };
                 saved.mode = Mode::Create;
+                2
+            }
+            ("--theme", Some(choice)) => {
+                saved.theme = match choice.to_str() {
+                    Some("light") => crate::theme::ThemeChoice::Light,
+                    Some("dark") => crate::theme::ThemeChoice::Dark,
+                    _ => crate::theme::ThemeChoice::System,
+                };
                 2
             }
             ("--midi", Some(path)) => {
@@ -2071,32 +2093,4 @@ fn heat(t: f32) -> Color32 {
         }
     }
     Color32::from_rgb(252, 250, 190)
-}
-
-/// Adds a system Japanese font as a fallback so the Japanese UI shows.
-fn install_fonts(ctx: &egui::Context) {
-    let candidates: &[(&str, u32)] = &[
-        ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
-        ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
-        ("/Library/Fonts/Arial Unicode.ttf", 0),
-        ("C:\\Windows\\Fonts\\YuGothM.ttc", 0),
-        ("C:\\Windows\\Fonts\\meiryo.ttc", 0),
-        ("C:\\Windows\\Fonts\\msgothic.ttc", 0),
-        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-    ];
-    for (path, index) in candidates {
-        if let Ok(bytes) = std::fs::read(PathBuf::from(path)) {
-            let mut data = FontData::from_owned(bytes);
-            data.index = *index;
-            ctx.add_font(FontInsert {
-                name: "japanese".into(),
-                data,
-                families: vec![
-                    InsertFontFamily { family: FontFamily::Proportional, priority: FontPriority::Lowest },
-                    InsertFontFamily { family: FontFamily::Monospace, priority: FontPriority::Lowest },
-                ],
-            });
-            return;
-        }
-    }
 }

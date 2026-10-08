@@ -13,6 +13,7 @@ use super::{StudioApp, file_name};
 use crate::create::dsp::SynthesisParams;
 use crate::create::{self, Created, Origin, Region, Update, Voicing};
 use crate::render::{Sound, SoundFile, Source};
+use crate::theme::{icon, labeled};
 use crate::tuning::VelocityCurve;
 
 /// How long changes settle before the instrument is made again.
@@ -139,7 +140,7 @@ impl StudioApp {
     pub(super) fn origin_ui(&mut self, ui: &mut egui::Ui) {
         let japanese = self.japanese;
         let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
-        ui.strong(t("Start from", "元にする音"));
+        ui.label(crate::theme::section(t("Start from", "元にする音")));
         let kind = match &self.create.origin {
             Origin::Sf2 { .. } => Kind::Sf2,
             Origin::Recordings { .. } => Kind::Recordings,
@@ -147,9 +148,9 @@ impl StudioApp {
         };
         let mut chosen = kind;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut chosen, Kind::Sf2, t("An SF2", "既存の SF2"));
-            ui.selectable_value(&mut chosen, Kind::Recordings, t("Recordings", "録音"));
-            ui.selectable_value(&mut chosen, Kind::Synthesis, t("Synthesis", "合成"));
+            ui.selectable_value(&mut chosen, Kind::Sf2, labeled(icon::FILE_AUDIO, t("An SF2", "既存の SF2")));
+            ui.selectable_value(&mut chosen, Kind::Recordings, labeled(icon::MICROPHONE, t("Recordings", "録音")));
+            ui.selectable_value(&mut chosen, Kind::Synthesis, labeled(icon::WAVE_SINE, t("Synthesis", "合成")));
         });
         if chosen != kind {
             self.create.origin = match chosen {
@@ -203,7 +204,7 @@ impl StudioApp {
                     "One WAV per note. The key is read from the file name (C4, F#2, 60…) or detected from the pitch.",
                     "1 音につき 1 つの WAV です。鍵盤はファイル名（C4、F#2、60 など）から読み取り、なければ音程から検出します。",
                 ));
-                if ui.button(t("Add WAV files…", "WAV を追加…")).clicked()
+                if ui.button(labeled(icon::PLUS, t("Add WAV files…", "WAV を追加…"))).clicked()
                     && let Some(chosen) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).pick_files()
                 {
                     for file in chosen {
@@ -215,7 +216,7 @@ impl StudioApp {
                 let mut remove = None;
                 for (i, file) in files.iter().enumerate() {
                     ui.horizontal(|ui| {
-                        if ui.small_button("×").clicked() {
+                        if ui.small_button(icon::X).clicked() {
                             remove = Some(i);
                         }
                         let key = crate::create::dsp::key_from_name(&file_name(file));
@@ -276,12 +277,12 @@ impl StudioApp {
             ui.add_space(6.0);
             ui.columns(2, |columns| {
                 let ui = &mut columns[0];
-                ui.strong(t("Level and tone", "音量と音色"));
+                ui.label(crate::theme::section(t("Level and tone", "音量と音色")));
                 ui.add(egui::Slider::new(&mut v.volume_db, -12.0..=12.0).suffix(" dB").text(t("Volume", "音量")));
                 ui.add(egui::Slider::new(&mut v.brightness_db, -12.0..=12.0).suffix(" dB").text(t("Brightness (highs)", "明るさ（高域）")));
                 ui.add(egui::Slider::new(&mut v.warmth_db, -12.0..=12.0).suffix(" dB").text(t("Warmth (lows)", "温かみ（低域）")));
                 ui.add_space(8.0);
-                ui.strong(t("Touch", "タッチ（強さ）"));
+                ui.label(crate::theme::section(t("Touch", "タッチ（強さ）")));
                 let mut range_db = v.velocity_range_cb / 10.0;
                 if ui.add(egui::Slider::new(&mut range_db, 0.0..=96.0).suffix(" dB").text(t("Soft-to-loud range", "弱音と強音の差"))).changed() {
                     v.velocity_range_cb = range_db * 10.0;
@@ -306,7 +307,7 @@ impl StudioApp {
                 );
 
                 let ui = &mut columns[1];
-                ui.strong(t("Sustain", "余韻"));
+                ui.label(crate::theme::section(t("Sustain", "余韻")));
                 ui.add(egui::Slider::new(&mut v.attack_ms, 0.0..=100.0).suffix(" ms").text(t("Attack (0 = as is)", "立ち上がり（0 = 元のまま）")));
                 ui.add(
                     egui::Slider::new(&mut v.decay_s, 0.0..=30.0)
@@ -319,7 +320,7 @@ impl StudioApp {
                         .text(t("Release (0 = as is)", "離したあとの余韻（0 = 元のまま）")),
                 );
                 ui.add_space(8.0);
-                ui.strong(t("Tuning and space", "調律と広がり"));
+                ui.label(crate::theme::section(t("Tuning and space", "調律と広がり")));
                 ui.add(egui::Slider::new(&mut v.stretch_cents, -30.0..=30.0).suffix(" cents").text(t("Stretch tuning", "ストレッチ調律")));
                 ui.add(egui::Slider::new(&mut v.width, 0.0..=1.5).text(t("Stereo width", "ステレオの広がり")));
                 ui.add(egui::Slider::new(&mut v.reverb_percent, 0.0..=100.0).suffix(" %").text(t("Reverb", "リバーブ")));
@@ -349,11 +350,11 @@ impl StudioApp {
             }
             let ready = self.create.created.is_some();
             ui.horizontal(|ui| {
-                if ui.add_enabled(ready, egui::Button::new(t("Save SF2…", "SF2 を保存…"))).clicked() {
+                if ui.add_enabled(ready, egui::Button::new(labeled(icon::FLOPPY_DISK, t("Save SF2…", "SF2 を保存…")))).clicked() {
                     self.save_created();
                 }
                 if ui
-                    .add_enabled(ready, egui::Button::new(t("Compare with others", "比較に追加")))
+                    .add_enabled(ready, egui::Button::new(labeled(icon::SCALES, t("Compare with others", "比較に追加"))))
                     .on_hover_text(t("Adds (or updates) a lane playing this instrument.", "この音源を鳴らすレーンを追加（または更新）します。"))
                     .clicked()
                 {
@@ -362,7 +363,7 @@ impl StudioApp {
                         message.push_str(if japanese { " 比較モードで見られます。" } else { " See it in Compare." });
                     }
                 }
-                if ui.button(t("Reset settings", "設定を初期値に戻す")).clicked() {
+                if ui.button(labeled(icon::ARROW_COUNTER_CLOCKWISE, t("Reset settings", "設定を初期値に戻す"))).clicked() {
                     let name = self.create.voicing.name.clone();
                     self.create.voicing = Voicing { name, ..Voicing::default() };
                     self.create.changed();

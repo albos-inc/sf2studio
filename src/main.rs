@@ -14,6 +14,7 @@ mod measure;
 mod midi_in;
 mod patterns;
 mod render;
+mod theme;
 mod tuning;
 
 fn main() -> eframe::Result {
@@ -21,7 +22,8 @@ fn main() -> eframe::Result {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("sf2studio")
             .with_inner_size([1280.0, 820.0])
-            .with_min_inner_size([900.0, 560.0]),
+            .with_min_inner_size([900.0, 560.0])
+            .with_icon(std::sync::Arc::new(theme::app_icon(256))),
         ..Default::default()
     };
     eframe::run_native("sf2studio", options, Box::new(|cc| Ok(Box::new(app::StudioApp::new(cc)))))
