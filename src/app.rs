@@ -103,12 +103,18 @@ impl Default for Saved {
             japanese: system_is_japanese(),
             mode: Mode::Compare,
             program: Program::Pattern(TestPattern::VelocitySweep),
-            lanes: vec![Source::Sf2 { path: None, tuning: SynthTuning::default() }, Source::MacSampler { path: None }],
+            lanes: vec![Source::Sf2 { path: None, tuning: SynthTuning::default() }, reference_lane()],
             level_match: true,
             layers: Layers::default(),
             keyboard: KeyboardSettings::default(),
         }
     }
+}
+
+/// The second lane a new setup starts with: the platform's own sampler on
+/// macOS (following lane A's SF2), a recording elsewhere.
+fn reference_lane() -> Source {
+    if cfg!(target_os = "macos") { Source::MacSampler { path: None } } else { Source::Wav { path: None } }
 }
 
 fn system_is_japanese() -> bool {
@@ -252,11 +258,29 @@ impl StudioApp {
         self.render_lane(index);
     }
 
+    /// The SF2 of the first sf2synth lane, which macOS sampler lanes without
+    /// their own SF2 play.
+    fn shared_sf2(&self) -> Option<PathBuf> {
+        self.lanes.iter().find_map(|l| match &l.source {
+            Source::Sf2 { path: Some(path), .. } => Some(path.clone()),
+            _ => None,
+        })
+    }
+
+    /// The lane's source with a followed SF2 filled in.
+    fn effective_source(&self, index: usize) -> Source {
+        match &self.lanes[index].source {
+            Source::MacSampler { path: None } => Source::MacSampler { path: self.shared_sf2() },
+            source => source.clone(),
+        }
+    }
+
     fn render_lane(&mut self, index: usize) {
+        let source = self.effective_source(index);
         let lane = &mut self.lanes[index];
         lane.generation += 1;
         lane.error = None;
-        if lane.source.path().is_none() {
+        if source.path().is_none() {
             lane.rendering = false;
             lane.audio = None;
             lane.analysis = None;
@@ -268,7 +292,7 @@ impl StudioApp {
         self.renderer.submit(Job {
             lane: lane.id,
             generation: lane.generation,
-            source: lane.source.clone(),
+            source,
             program: self.program.clone(),
             sample_rate: self.sample_rate,
         });
@@ -637,6 +661,7 @@ impl StudioApp {
         let mut rerender = Vec::new();
         let gains = self.gains();
         let japanese = self.japanese;
+        let shared = self.shared_sf2();
         for i in 0..self.lanes.len() {
             let lane = &mut self.lanes[i];
             egui::Frame::group(ui.style()).stroke(Stroke::new(1.0, LANE_COLORS[i].gamma_multiply(0.6))).show(
@@ -644,11 +669,11 @@ impl StudioApp {
                 |ui| {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(lane_letter(i)).color(LANE_COLORS[i]).strong().size(18.0));
-                        let kinds = [
-                            (0, "sf2synth + SF2"),
-                            (1, if japanese { "Mac 標準 + SF2" } else { "macOS sampler + SF2" }),
-                            (2, if japanese { "WAV ファイル" } else { "WAV file" }),
-                        ];
+                        let mut kinds = vec![(0, "sf2synth + SF2")];
+                        if cfg!(target_os = "macos") {
+                            kinds.push((1, if japanese { "Mac 標準 + SF2" } else { "macOS sampler + SF2" }));
+                        }
+                        kinds.push((2, if japanese { "WAV ファイル" } else { "WAV file" }));
                         let kind = match lane.source {
                             Source::Sf2 { .. } => 0,
                             Source::MacSampler { .. } => 1,
@@ -656,16 +681,16 @@ impl StudioApp {
                         };
                         egui::ComboBox::from_id_salt(("kind", lane.id))
                             .width(150.0)
-                            .selected_text(kinds[kind].1)
+                            .selected_text(kinds.iter().find(|(k, _)| *k == kind).map_or("", |(_, n)| n))
                             .show_ui(ui, |ui| {
-                                for (k, name) in kinds {
+                                for &(k, name) in &kinds {
                                     if ui.selectable_label(k == kind, name).clicked() && k != kind {
                                         let path = lane.source.path().map(|p| p.to_path_buf());
                                         let sf2 = path
                                             .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("sf2")));
                                         lane.source = match k {
                                             0 => Source::Sf2 { path: sf2, tuning: SynthTuning::default() },
-                                            1 => Source::MacSampler { path: sf2 },
+                                            1 => Source::MacSampler { path: None },
                                             _ => Source::Wav { path: None },
                                         };
                                         rerender.push(i);
@@ -681,16 +706,31 @@ impl StudioApp {
                         }
                     });
                     let is_wav = matches!(lane.source, Source::Wav { .. });
-                    let label = lane.source.path().map(file_name).unwrap_or_else(|| {
-                        (if is_wav {
-                            if japanese { "WAV を選ぶ…" } else { "Choose a WAV…" }
-                        } else if japanese {
-                            "SF2 を選ぶ…"
-                        } else {
-                            "Choose an SF2…"
+                    let follows = matches!(lane.source, Source::MacSampler { path: None });
+                    let label = lane
+                        .source
+                        .path()
+                        .map(file_name)
+                        .or_else(|| {
+                            follows.then(|| {
+                                let name = shared.as_deref().map(file_name).unwrap_or_default();
+                                if japanese {
+                                    format!("A と同じ SF2（{name}）")
+                                } else {
+                                    format!("Same SF2 as A ({name})")
+                                }
+                            })
                         })
-                        .to_string()
-                    });
+                        .unwrap_or_else(|| {
+                            (if is_wav {
+                                if japanese { "WAV を選ぶ…" } else { "Choose a WAV…" }
+                            } else if japanese {
+                                "SF2 を選ぶ…"
+                            } else {
+                                "Choose an SF2…"
+                            })
+                            .to_string()
+                        });
                     if ui.button(label).clicked() {
                         let dialog = if is_wav {
                             rfd::FileDialog::new().add_filter("WAV", &["wav"])
@@ -740,6 +780,14 @@ impl StudioApp {
                     self.focus = self.focus.saturating_sub(1);
                 }
                 self.sync_player();
+            }
+        }
+        // macOS sampler lanes following an sf2synth lane's SF2 follow its changes.
+        if rerender.iter().any(|&i| matches!(self.lanes.get(i).map(|l| &l.source), Some(Source::Sf2 { .. }))) {
+            for (i, lane) in self.lanes.iter().enumerate() {
+                if matches!(lane.source, Source::MacSampler { path: None }) && !rerender.contains(&i) {
+                    rerender.push(i);
+                }
             }
         }
         for i in rerender {
