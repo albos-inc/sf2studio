@@ -87,10 +87,6 @@ impl Source {
     }
 }
 
-fn is_dls(path: &Path) -> bool {
-    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dls"))
-}
-
 /// What the lanes play.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Program {
@@ -176,9 +172,6 @@ fn run(job: &Job, fonts: &Mutex<HashMap<PathBuf, Arc<SoundFont>>>) -> Result<(Ar
             let path = sound.file.path().ok_or("no instrument file")?;
             match engine {
                 Engine::Sf2synth => {
-                    if is_dls(&path) {
-                        return Err("sf2synth can't read DLS files yet. Use the macOS sampler.".into());
-                    }
                     let font = load_font(&path, fonts)?;
                     render_sf2(font, tuning, sound, &job.program, job.sample_rate)?
                 }

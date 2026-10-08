@@ -121,7 +121,7 @@ impl Default for Saved {
             japanese: system_is_japanese(),
             mode: Mode::Compare,
             program: Program::Pattern(TestPattern::VelocitySweep),
-            lanes: vec![Source::sf2synth(Sound { file: SoundFile::SameAsA, bank: 0, program: 0 }), reference_lane()],
+            lanes: vec![Source::sf2synth(platform_sound()), reference_lane()],
             level_match: true,
             layers: Layers::default(),
             keyboard: KeyboardSettings::default(),
@@ -132,15 +132,17 @@ impl Default for Saved {
     }
 }
 
+/// The instruments a new setup starts with: macOS's own General MIDI set
+/// there (so the lanes sound with nothing chosen), none elsewhere.
+fn platform_sound() -> Sound {
+    let file = if cfg!(target_os = "macos") { SoundFile::MacBuiltIn } else { SoundFile::SameAsA };
+    Sound { file, bank: 0, program: 0 }
+}
+
 /// The second lane a new setup starts with: on macOS the system's own
-/// sampler playing the system's own instruments (sounds with nothing
-/// chosen), elsewhere a recording.
+/// sampler playing the same instruments as lane A, elsewhere a recording.
 fn reference_lane() -> Source {
-    if cfg!(target_os = "macos") {
-        Source::mac_sampler(Sound { file: SoundFile::MacBuiltIn, bank: 0, program: 0 })
-    } else {
-        Source::Wav { path: None }
-    }
+    if cfg!(target_os = "macos") { Source::mac_sampler(platform_sound()) } else { Source::Wav { path: None } }
 }
 
 fn system_is_japanese() -> bool {
@@ -742,7 +744,6 @@ impl StudioApp {
                 Source::Synth { engine: Engine::Sf2synth, sound, .. } => sound
                     .file
                     .path()
-                    .filter(|p| !is_dls(p))
                     .and_then(|p| self.renderer.font(&p).ok())
                     .map(|font| {
                         let mut list: Vec<(u16, u8, String)> = font
@@ -806,7 +807,7 @@ impl StudioApp {
                     });
 
                     match &mut lane.source {
-                        Source::Synth { engine, sound, .. } => {
+                        Source::Synth { sound, .. } => {
                             // Instrument file.
                             ui.horizontal(|ui| {
                                 ui.label(t("Sound", "音源"));
@@ -894,15 +895,6 @@ impl StudioApp {
                                             }
                                         });
                                 });
-                            }
-                            if *engine == Engine::Sf2synth && effective.path().is_some_and(|p| is_dls(&p)) {
-                                ui.colored_label(
-                                    Color32::from_rgb(240, 190, 90),
-                                    t(
-                                        "sf2synth can't read DLS yet: choose the macOS sampler.",
-                                        "sf2synth はまだ DLS を読めません。シンセを Mac 標準にしてください。",
-                                    ),
-                                );
                             }
                         }
                         Source::Wav { path } => {
@@ -1083,11 +1075,7 @@ impl StudioApp {
         }
         let wanted = match (self.mode, self.focus < self.lanes.len()) {
             (Mode::Tune, true) => match self.effective_source(self.focus) {
-                source @ Source::Synth { engine: Engine::Sf2synth, .. }
-                    if source.path().is_some_and(|p| !is_dls(&p)) =>
-                {
-                    Some(source)
-                }
+                source @ Source::Synth { engine: Engine::Sf2synth, .. } if source.path().is_some() => Some(source),
                 _ => None,
             },
             _ => None,
@@ -2059,10 +2047,6 @@ fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
     }
 }
 
-fn is_dls(path: &std::path::Path) -> bool {
-    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dls"))
-}
-
 fn lane_letter(index: usize) -> char {
     (b'A' + index as u8) as char
 }
@@ -2120,6 +2104,8 @@ mod tests {
         let saved = Saved::default();
         assert!(matches!(&saved.lanes[0], Source::Synth { engine: Engine::Sf2synth, .. }));
         if cfg!(target_os = "macos") {
+            // sf2synth reads macOS's DLS set too.
+            assert!(matches!(&saved.lanes[0], Source::Synth { sound, .. } if sound.file == SoundFile::MacBuiltIn));
             // The macOS sampler with macOS's own instruments: sounds with nothing chosen.
             assert!(matches!(
                 &saved.lanes[1],

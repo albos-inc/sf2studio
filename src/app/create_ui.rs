@@ -165,13 +165,15 @@ impl StudioApp {
         match &mut self.create.origin {
             Origin::Sf2 { path, bank, program } => {
                 ui.label(t(
-                    "Re-voice a preset of an SF2: its samples are kept and shaped by the settings on the right.",
-                    "SF2 のプリセットを作り直します。サンプルはそのまま使い、右の設定で整えます。",
+                    "Re-voice a preset of an SF2 or DLS: its samples are kept and shaped by the settings on the right.",
+                    "SF2 や DLS のプリセットを作り直します。サンプルはそのまま使い、右の設定で整えます。",
                 ));
-                let label =
-                    path.as_deref().map(file_name).unwrap_or_else(|| t("Choose an SF2…", "SF2 を選ぶ…").to_string());
+                let label = path
+                    .as_deref()
+                    .map(file_name)
+                    .unwrap_or_else(|| t("Choose an SF2 or DLS…", "SF2 / DLS を選ぶ…").to_string());
                 if ui.button(label).clicked()
-                    && let Some(chosen) = rfd::FileDialog::new().add_filter("SF2", &["sf2"]).pick_file()
+                    && let Some(chosen) = rfd::FileDialog::new().add_filter("SF2 / DLS", &["sf2", "dls"]).pick_file()
                 {
                     *path = Some(chosen);
                     *bank = 0;
