@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use sf2synth::Synthesizer;
 
+use crate::abx::Abx;
 use crate::analysis::{Analysis, FLOOR_DB, Rendered, SPECTRUM_HIGH_HZ, SPECTRUM_LOW_HZ, SPECTRUM_ROWS, to_db};
 use crate::audio::{LaneAudio, Live, Player};
 use crate::gm;
@@ -97,13 +98,14 @@ struct Layers {
     closeup: bool,
     /// Measurement charts (Compare mode).
     measure: bool,
+    piano_roll: bool,
     /// Charts relative to each key's loudest / brightest note.
     relative: bool,
 }
 
 impl Default for Layers {
     fn default() -> Self {
-        Layers { spectrogram: true, envelope: true, closeup: true, measure: true, relative: true }
+        Layers { spectrogram: true, envelope: true, closeup: true, measure: true, piano_roll: true, relative: true }
     }
 }
 
@@ -218,6 +220,7 @@ pub struct StudioApp {
     fit_view: bool,
     /// The program's notes, for the measurements.
     program_notes: Option<(Program, Arc<Vec<Note>>)>,
+    abx: Abx,
 }
 
 impl StudioApp {
@@ -260,6 +263,7 @@ impl StudioApp {
             midi_ports: Vec::new(),
             fit_view: false,
             program_notes: None,
+            abx: Abx::new(),
         };
         for source in saved.lanes.into_iter().take(MAX_LANES) {
             app.add_lane(source);
@@ -473,6 +477,19 @@ impl StudioApp {
         }
     }
 
+    /// Hears only `lane` without showing which (blind test).
+    fn hear_only(&mut self, lane: usize) {
+        if lane < self.lanes.len() {
+            self.outputs = (0..self.lanes.len()).map(|i| i == lane).collect();
+            self.push_outputs();
+        }
+    }
+
+    /// Whether which lane is heard must not show (a blind test is running).
+    fn concealed(&self) -> bool {
+        self.abx.open && self.mode == Mode::Compare
+    }
+
     fn set_mode(&mut self, mode: Mode) {
         if self.mode != mode {
             self.mode = mode;
@@ -503,6 +520,9 @@ impl StudioApp {
         });
         if space {
             self.toggle_play();
+        }
+        if self.concealed() {
+            return;
         }
         if let Some(lane) = pressed {
             match (self.mode, shift) {
@@ -575,6 +595,15 @@ impl StudioApp {
             ui.monospace(format!("{} / {}", clock(position), clock(duration)));
             ui.separator();
             if self.mode == Mode::Compare {
+                let blind = self.t("Blind test", "ブラインドテスト");
+                ui.toggle_value(&mut self.abx.open, blind);
+            }
+            if self.concealed() {
+                ui.label(self.t(
+                    "Which lane plays is hidden during the test.",
+                    "テスト中は、どのレーンが鳴っているかを隠しています。",
+                ));
+            } else if self.mode == Mode::Compare {
                 ui.label(self.t("Output:", "出力:"));
                 for (i, &color) in LANE_COLORS.iter().enumerate().take(self.lanes.len()) {
                     let mut on = self.outputs[i];
@@ -1391,6 +1420,7 @@ impl StudioApp {
             ui.toggle_value(&mut self.layers.spectrogram, if japanese { "スペクトログラム" } else { "Spectrogram" });
             ui.toggle_value(&mut self.layers.envelope, if japanese { "音量推移 (dB)" } else { "Level (dB)" });
             ui.toggle_value(&mut self.layers.closeup, if japanese { "拡大波形" } else { "Waveform close-up" });
+            ui.toggle_value(&mut self.layers.piano_roll, if japanese { "ピアノロール" } else { "Piano roll" });
             if self.mode == Mode::Compare {
                 ui.toggle_value(&mut self.layers.measure, if japanese { "計測グラフ" } else { "Measurements" });
             }
@@ -1401,7 +1431,8 @@ impl StudioApp {
         let duration = self.duration();
         let position = self.position_seconds();
         let playing = self.is_playing();
-        let heard = self.heard();
+        let heard = if self.concealed() { vec![false; self.lanes.len()] } else { self.heard() };
+        let notes = self.program_notes();
         if duration <= 0.0 {
             ui.centered_and_justified(|ui| {
                 ui.label(self.t(
@@ -1431,8 +1462,13 @@ impl StudioApp {
 
         let ruler_height = 20.0;
         let closeup_height = if self.layers.closeup { (rect.height() * 0.22).clamp(80.0, 180.0) } else { 0.0 };
-        let lanes_rect = Rect::from_min_max(
+        let roll_height = if self.layers.piano_roll && !notes.is_empty() { 64.0 } else { 0.0 };
+        let roll_rect = Rect::from_min_size(
             Pos2::new(rect.left(), rect.top() + ruler_height),
+            Vec2::new(rect.width(), roll_height),
+        );
+        let lanes_rect = Rect::from_min_max(
+            Pos2::new(rect.left(), rect.top() + ruler_height + roll_height),
             Pos2::new(rect.right(), rect.bottom() - closeup_height - 6.0),
         );
         let lane_height = lanes_rect.height() / self.lanes.len().max(1) as f32;
@@ -1457,6 +1493,30 @@ impl StudioApp {
                 Color32::GRAY,
             );
             tick += step;
+        }
+
+        // Piano roll: the program's notes, as strong as their velocity.
+        if roll_height > 0.0 {
+            painter.rect_filled(roll_rect, 0.0, Color32::from_gray(24));
+            let low = notes.iter().map(|n| n.key).min().unwrap_or(21).saturating_sub(1);
+            let high = notes.iter().map(|n| n.key).max().unwrap_or(108) + 1;
+            let row = roll_rect.height() / (high - low + 1) as f32;
+            for note in notes.iter() {
+                let (x0, x1) = (to_x(note.start), to_x(note.end));
+                if x1 < rect.left() || x0 > rect.right() {
+                    continue;
+                }
+                let y = roll_rect.bottom() - (note.key - low + 1) as f32 * row;
+                let sounding = position >= note.start && position < note.end;
+                let alpha = 70 + (note.velocity as u32 * 185 / 127) as u8;
+                let color = if sounding {
+                    Color32::from_rgb(255, 230, 120)
+                } else {
+                    Color32::from_rgba_unmultiplied(255, 200, 60, alpha)
+                };
+                let bar = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1.max(x0 + 2.0), y + row.max(2.0)));
+                painter.rect_filled(bar, 1.0, color);
+            }
         }
 
         // Lanes.
@@ -1514,7 +1574,29 @@ impl StudioApp {
 
         // Interaction.
         let shift = ui.input(|i| i.modifiers.shift);
+        // Clicking a note in the piano roll loops it.
+        if response.clicked()
+            && let Some(pointer) = response.interact_pointer_pos()
+            && roll_rect.contains(pointer)
+        {
+            let t = to_t(pointer.x);
+            let picked = notes
+                .iter()
+                .filter(|n| n.start <= t + 0.05 && n.end >= t - 0.05)
+                .min_by(|a, b| (a.start - t).abs().total_cmp(&(b.start - t).abs()));
+            if let Some(note) = picked {
+                let rate = self.sample_rate as f64;
+                let start = (note.start - 0.05).max(0.0);
+                let end = note.end + 0.6;
+                self.with_transport(|tr| {
+                    tr.loop_range = Some(((start * rate) as usize, (end * rate) as usize));
+                    tr.position = (start * rate) as usize;
+                    tr.playing = true;
+                });
+            }
+        }
         if let Some(pointer) = response.interact_pointer_pos()
+            && !roll_rect.contains(pointer)
             && (lanes_rect.contains(pointer) || pointer.y < lanes_rect.top())
         {
             let t = to_t(pointer.x).clamp(0.0, duration);
@@ -1806,6 +1888,17 @@ impl eframe::App for StudioApp {
             egui::Panel::right("tuning").resizable(true).default_size(300.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.tuning_ui(ui));
             });
+        }
+        if self.mode == Mode::Compare && self.abx.open {
+            let count = self.lanes.len();
+            if let Some(lane) = self.abx.show(ui.ctx(), self.japanese, count, lane_letter) {
+                self.hear_only(lane);
+                self.with_transport(|t| {
+                    if t.length() > 0 {
+                        t.playing = true;
+                    }
+                });
+            }
         }
         egui::CentralPanel::default().show(ui, |ui| match self.mode {
             Mode::Create => self.create_ui(ui),
