@@ -19,6 +19,13 @@ level and brightness, decay per key) and an ABX blind test.
 Light, dark or system theme; English and Japanese; Help, update check and
 About in the Help menu.
 
+## Guide
+
+An illustrated guide to every screen and setting, how to read the views and
+step-by-step recipes: **[English](docs/en/README.md)** ·
+**[日本語](docs/ja/README.md)**. It also opens from Help → Open the
+illustrated guide.
+
 ## Keys
 
 | Key | |
@@ -48,6 +55,10 @@ cargo run --release -- --sf2 piano.sf2 --mac piano.sf2 --mac-builtin --midi song
 `--sf2`, `--mac` (macOS sampler), `--mac-builtin` (macOS's GS set) and
 `--wav` add lanes in order; `--create <sf2>` opens Create on a file;
 `--theme light|dark|system`.
+
+`docs/tools/capture.sh` takes the guide's screenshots again (macOS:
+`cargo run --features capture -- --capture docs/images`), and
+`python3 docs/tools/diagrams.py` redraws its diagrams.
 
 ## Icon
 

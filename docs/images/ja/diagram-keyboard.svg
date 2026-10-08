@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="329" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">押す位置で強さ（ベロシティ）が決まる</text>
+<rect x="130.0" y="70.0" width="62.0" height="220.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="194.0" y="70.0" width="62.0" height="220.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="258.0" y="70.0" width="62.0" height="220.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="258.0" y="70.0" width="62.0" height="220.0" rx="4" fill="url(#press)" stroke="none" stroke-width="1.5" />
+<rect x="322.0" y="70.0" width="62.0" height="220.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="386.0" y="70.0" width="62.0" height="220.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="174.0" y="70.0" width="38.0" height="136.0" rx="3" fill="#22252b" stroke="none" stroke-width="1.5" />
+<rect x="238.0" y="70.0" width="38.0" height="136.0" rx="3" fill="#22252b" stroke="none" stroke-width="1.5" />
+<rect x="366.0" y="70.0" width="38.0" height="136.0" rx="3" fill="#22252b" stroke="none" stroke-width="1.5" />
+<line x1="262.0" y1="246.0" x2="316.0" y2="246.0" stroke="#4084ff" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="328.0" y="220.0" width="104.0" height="26.0" rx="4" fill="#000000cc" stroke="none" stroke-width="1.5" />
+<text x="336.0" y="238.0" font-size="13" font-weight="400" fill="#fff" text-anchor="start">E4  vel 102</text>
+<text x="289.0" y="62.0" font-size="13" font-weight="400" fill="#687082" text-anchor="middle">上: 弱い (1)</text>
+<text x="289.0" y="312.0" font-size="13" font-weight="700" fill="#4084ff" text-anchor="middle">下: 強い (127)</text>
+<rect x="134.0" y="140.0" width="4.0" height="150.0" rx="1" fill="#ffc83c" stroke="none" stroke-width="1.5" />
+<line x1="124.0" y1="140.0" x2="124.0" y2="290.0" stroke="#ffc83c" stroke-width="2" stroke-linecap="round"/>
+<text x="118.0" y="220.0" font-size="11.5" font-weight="400" fill="#687082" text-anchor="end">直前の音:</text>
+<text x="118.0" y="235.5" font-size="11.5" font-weight="400" fill="#687082" text-anchor="end">バーの高さ =</text>
+<text x="118.0" y="251.1" font-size="11.5" font-weight="400" fill="#687082" text-anchor="end">ベロシティ</text>
+<circle cx="500" cy="77" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="500.0" y="82.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="522.0" y="82.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">ポインタの位置で鍵盤と強さを表示</text>
+<text x="522.0" y="103.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">線とラベルがポインタについて動きます。</text>
+<circle cx="500" cy="137" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="500.0" y="142.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="522.0" y="142.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">押している間鳴り続ける</text>
+<text x="522.0" y="163.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">離すと、その音を全レーンで書き出します（調整再生）。</text>
+<circle cx="500" cy="197" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="500.0" y="202.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="522.0" y="202.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">強さを固定</text>
+<text x="522.0" y="223.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">どこを押してもスライダーの強さで鳴ります。</text>
+<circle cx="500" cy="257" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="500.0" y="262.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+<text x="522.0" y="262.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">長さを固定</text>
+<text x="522.0" y="283.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">押す長さに関係なく、設定した秒数だけ鳴ります。</text>
+</svg>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="299" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">ブラインドテスト（ABX）</text>
+<rect x="40.0" y="70.0" width="90.0" height="52.0" rx="10" fill="#5aaaff" stroke="none" stroke-width="1.5" />
+<text x="85.0" y="103.0" font-size="18" font-weight="700" fill="#fff" text-anchor="middle">🔊 A</text>
+<rect x="40.0" y="140.0" width="90.0" height="52.0" rx="10" fill="#ffa03c" stroke="none" stroke-width="1.5" />
+<text x="85.0" y="173.0" font-size="18" font-weight="700" fill="#fff" text-anchor="middle">🔊 B</text>
+<rect x="200.0" y="105.0" width="90.0" height="52.0" rx="10" fill="#5b6270" stroke="none" stroke-width="1.5" />
+<text x="245.0" y="138.0" font-size="18" font-weight="700" fill="#fff" text-anchor="middle">🔊 X</text>
+<path d="M132,96 C165,96 165,122 196,124" stroke="#687082" stroke-width="1.5" fill="none" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M132,166 C165,166 165,140 196,138" stroke="#687082" stroke-width="1.5" fill="none" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round" />
+<text x="245.0" y="180.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">A か B（どちらかは秘密）</text>
+<line x1="300.0" y1="131.0" x2="360.0" y2="131.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<rect x="370.0" y="96.0" width="170.0" height="70.0" rx="10" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<text x="455.0" y="124.0" font-size="14" font-weight="700" fill="#1f2430" text-anchor="middle">「X は A」/「X は B」</text>
+<text x="455.0" y="148.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">答えるたびに X を選び直す</text>
+<line x1="550.0" y1="131.0" x2="600.0" y2="131.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<rect x="610.0" y="80.0" width="260.0" height="104.0" rx="10" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<text x="626.0" y="108.0" font-size="14" font-weight="700" fill="#1f2430" text-anchor="start">正解 9 / 10</text>
+<text x="626.0" y="132.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">当てずっぽうでこうなる確率 1.1%</text>
+<text x="626.0" y="156.0" font-size="12.5" font-weight="700" fill="#1e8e4e" text-anchor="start">聞き分けられています。</text>
+<path d="M740,186 C740,240 455,240 455,170" stroke="#687082" stroke-width="1.5" fill="none" stroke-dasharray="5 5" marker-end="url(#arrow)" stroke-linecap="round" stroke-linejoin="round" />
+<text x="600.0" y="250.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">聞き直して、また答える</text>
+<text x="40.0" y="280.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">8 回以上答え、確率が 5% 未満なら、たまたまではなく本当に違いが聞こえています。</text>
+</svg>

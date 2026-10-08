@@ -51,6 +51,13 @@ impl Abx {
         self.next_trial();
     }
 
+    /// Some answers already given, for the guide's screenshots.
+    #[cfg(feature = "capture")]
+    pub fn demo(&mut self) {
+        self.answers = vec![true, true, false, true, true, true, true, true, true, true];
+        self.last = Some(true);
+    }
+
     /// The lane to hear for a listen button.
     pub fn lane(&self, listen: Listen) -> usize {
         match listen {
@@ -72,9 +79,11 @@ impl Abx {
         let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
         let mut open = self.open;
         let mut hear = None;
-        egui::Window::new(t("Blind test (ABX)", "ブラインドテスト（ABX）")).open(&mut open).resizable(false).show(
-            ctx,
-            |ui| {
+        let window = egui::Window::new(t("Blind test (ABX)", "ブラインドテスト（ABX）"))
+            .open(&mut open)
+            .resizable(false)
+            .min_width(340.0)
+            .show(ctx, |ui| {
                 ui.label(t(
                     "X is A or B at random. Listen to all three, then say which X is.",
                     "X は A か B のどちらかです（毎回ランダム）。3 つを聞き比べて、X がどちらかを答えてください。",
@@ -161,8 +170,10 @@ impl Abx {
                 if ui.button(t("Start over", "最初から")).clicked() {
                     self.reset();
                 }
-            },
-        );
+            });
+        if let Some(window) = window {
+            crate::app::mark(ctx, "abx-window", 0, window.response.rect);
+        }
         self.open = open;
         hear
     }

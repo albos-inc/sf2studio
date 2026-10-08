@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="299" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">強さのレイヤー: 弱く弾くほど暗い音のコピーを鳴らす（3 レイヤーの例）</text>
+<rect x="62.0" y="100.0" width="249.8" height="54.0" rx="8" fill="#3a4a66" stroke="none" stroke-width="1.5" />
+<text x="186.9" y="124.0" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">v1: 1–42</text>
+<text x="186.9" y="144.0" font-size="12" font-weight="400" fill="#fff" text-anchor="middle">一番暗い: 2500 Hz</text>
+<rect x="322.0" y="100.0" width="249.8" height="54.0" rx="8" fill="#6d86b5" stroke="none" stroke-width="1.5" />
+<text x="446.9" y="124.0" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">v2: 43–84</text>
+<text x="446.9" y="144.0" font-size="12" font-weight="400" fill="#fff" text-anchor="middle">約 6700 Hz</text>
+<rect x="582.0" y="100.0" width="256.0" height="54.0" rx="8" fill="#a9c4ff" stroke="none" stroke-width="1.5" />
+<text x="710.0" y="124.0" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">v3: 85–127</text>
+<text x="710.0" y="144.0" font-size="12" font-weight="400" fill="#fff" text-anchor="middle">元のまま</text>
+<line x1="60.0" y1="174.0" x2="840.0" y2="174.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="60.0" y="194.0" font-size="12" font-weight="400" fill="#687082" text-anchor="start">ベロシティ 1</text>
+<text x="840.0" y="194.0" font-size="12" font-weight="400" fill="#687082" text-anchor="end">127</text>
+<text x="60.0" y="230.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">各レイヤーはサンプルに高域を削るフィルターをかけたコピーです。一番弱い層は「一番弱いレイヤーの高域」を使います。</text>
+<text x="60.0" y="252.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">1 つのサンプルが全ベロシティを受け持つ場合だけ作ります（元からレイヤーのある音源では作りません）。</text>
+<text x="60.0" y="274.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">レイヤーを増やすほどファイルは大きくなります。</text>
+</svg>

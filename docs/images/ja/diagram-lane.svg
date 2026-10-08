@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400" viewBox="0 0 900 400" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="399" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">レーン: 何を鳴らし、どう表示するか</text>
+<rect x="30.0" y="62.0" width="330.0" height="300.0" rx="12" fill="#f4f6f9" stroke="#5aaaff" stroke-width="2" />
+<text x="50.0" y="94.0" font-size="22" font-weight="700" fill="#5aaaff" text-anchor="start">A</text>
+<text x="80.0" y="92.0" font-size="15" font-weight="700" fill="#1f2430" text-anchor="start">シンセ</text>
+<rect x="80.0" y="102.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="117.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">sf2synth</text>
+<rect x="80.0" y="124.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="139.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">Mac 標準（macOS のみ）</text>
+<rect x="80.0" y="146.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="161.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">WAV（録音）</text>
+<text x="80.0" y="198.0" font-size="15" font-weight="700" fill="#1f2430" text-anchor="start">音源</text>
+<rect x="80.0" y="208.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="223.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">SF2 / DLS ファイル</text>
+<rect x="80.0" y="230.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="245.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">A と同じ · 内蔵 GS 音源</text>
+<text x="80.0" y="282.0" font-size="15" font-weight="700" fill="#1f2430" text-anchor="start">音色</text>
+<rect x="80.0" y="292.0" width="262.0" height="20.0" rx="5" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="90.0" y="307.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">バンク:プログラム（例 0:0 Piano 1）</text>
+<text x="40.0" y="385.0" font-size="11.5" font-weight="400" fill="#687082" text-anchor="start">WAV のレーンはファイルをそのまま鳴らします（音源・音色なし）。</text>
+<line x1="372.0" y1="194.0" x2="470.0" y2="194.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="421.0" y="170.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">書き出し</text>
+<rect x="380.0" y="206.0" width="84.0" height="64.0" rx="8" fill="#fff" stroke="#d9dde5" stroke-width="1" />
+<text x="422.0" y="226.0" font-size="11.5" font-weight="400" fill="#1f2430" text-anchor="middle">再生する</text>
+<text x="422.0" y="241.5" font-size="11.5" font-weight="400" fill="#1f2430" text-anchor="middle">内容</text>
+<rect x="480.0" y="74.0" width="390.0" height="24.0" rx="4" fill="#2d4a6b" stroke="none" stroke-width="1.5" />
+<text x="490.0" y="91.0" font-size="12.5" font-weight="400" fill="#fff" text-anchor="start">▶ A  🔊  sf2synth · piano.sf2 · 0:0</text>
+<rect x="480.0" y="98.0" width="390.0" height="132.0" rx="0" fill="#16181d" stroke="none" stroke-width="1.5" />
+<rect x="498" y="216.0" width="65" height="4" fill="url(#heat-x)" opacity="0.91"/>
+<rect x="590" y="216.0" width="65" height="4" fill="url(#heat-x)" opacity="0.91"/>
+<rect x="682" y="216.0" width="65" height="4" fill="url(#heat-x)" opacity="0.91"/>
+<rect x="774" y="216.0" width="65" height="4" fill="url(#heat-x)" opacity="0.91"/>
+<rect x="498" y="184.5" width="60" height="4" fill="url(#heat-x)" opacity="0.82"/>
+<rect x="590" y="184.5" width="60" height="4" fill="url(#heat-x)" opacity="0.82"/>
+<rect x="682" y="184.5" width="60" height="4" fill="url(#heat-x)" opacity="0.82"/>
+<rect x="774" y="184.5" width="60" height="4" fill="url(#heat-x)" opacity="0.82"/>
+<rect x="498" y="166.0" width="55" height="4" fill="url(#heat-x)" opacity="0.73"/>
+<rect x="590" y="166.0" width="55" height="4" fill="url(#heat-x)" opacity="0.73"/>
+<rect x="682" y="166.0" width="55" height="4" fill="url(#heat-x)" opacity="0.73"/>
+<rect x="774" y="166.0" width="55" height="4" fill="url(#heat-x)" opacity="0.73"/>
+<rect x="498" y="152.9" width="50" height="4" fill="url(#heat-x)" opacity="0.64"/>
+<rect x="590" y="152.9" width="50" height="4" fill="url(#heat-x)" opacity="0.64"/>
+<rect x="682" y="152.9" width="50" height="4" fill="url(#heat-x)" opacity="0.64"/>
+<rect x="774" y="152.9" width="50" height="4" fill="url(#heat-x)" opacity="0.64"/>
+<rect x="498" y="142.8" width="45" height="4" fill="url(#heat-x)" opacity="0.55"/>
+<rect x="590" y="142.8" width="45" height="4" fill="url(#heat-x)" opacity="0.55"/>
+<rect x="682" y="142.8" width="45" height="4" fill="url(#heat-x)" opacity="0.55"/>
+<rect x="774" y="142.8" width="45" height="4" fill="url(#heat-x)" opacity="0.55"/>
+<rect x="498" y="134.5" width="40" height="4" fill="url(#heat-x)" opacity="0.46"/>
+<rect x="590" y="134.5" width="40" height="4" fill="url(#heat-x)" opacity="0.46"/>
+<rect x="682" y="134.5" width="40" height="4" fill="url(#heat-x)" opacity="0.46"/>
+<rect x="774" y="134.5" width="40" height="4" fill="url(#heat-x)" opacity="0.46"/>
+<rect x="498" y="127.4" width="35" height="4" fill="url(#heat-x)" opacity="0.37"/>
+<rect x="590" y="127.4" width="35" height="4" fill="url(#heat-x)" opacity="0.37"/>
+<rect x="682" y="127.4" width="35" height="4" fill="url(#heat-x)" opacity="0.37"/>
+<rect x="774" y="127.4" width="35" height="4" fill="url(#heat-x)" opacity="0.37"/>
+<rect x="498" y="121.4" width="30" height="4" fill="url(#heat-x)" opacity="0.28"/>
+<rect x="590" y="121.4" width="30" height="4" fill="url(#heat-x)" opacity="0.28"/>
+<rect x="682" y="121.4" width="30" height="4" fill="url(#heat-x)" opacity="0.28"/>
+<rect x="774" y="121.4" width="30" height="4" fill="url(#heat-x)" opacity="0.28"/>
+<path d="M498.0,224.0 L501.0,124.0 L564.0,154.0 L572.0,224.0 L590.0,224.0 L593.0,128.0 L656.0,158.0 L664.0,224.0 L682.0,224.0 L685.0,132.0 L748.0,162.0 L756.0,224.0 L774.0,224.0 L777.0,136.0 L840.0,166.0 L848.0,224.0" stroke="#5aaaff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+<text x="675.0" y="256.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">音量 · ピーク · 補正 · 明るさ（左パネル）</text>
+<text x="675.0" y="280.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="middle">スペクトログラム・音量推移・拡大波形を</text>
+<text x="675.0" y="302.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="middle">タイムラインにレーンの色で表示</text>
+</svg>

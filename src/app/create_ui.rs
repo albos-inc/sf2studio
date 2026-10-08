@@ -32,7 +32,7 @@ pub(super) struct CreateState {
     receiver: Receiver<Update>,
     /// The Compare lane showing the made instrument.
     lane: Option<u64>,
-    message: Option<String>,
+    pub(super) message: Option<String>,
 }
 
 impl CreateState {
@@ -67,7 +67,7 @@ impl CreateState {
         self.pending.is_some() || self.progress.is_some()
     }
 
-    fn changed(&mut self) {
+    pub(super) fn changed(&mut self) {
         self.pending = Some(Instant::now());
     }
 }
@@ -394,7 +394,7 @@ impl StudioApp {
     }
 
     /// Writes the instrument to a scratch file and shows it in a lane.
-    fn send_to_compare(&mut self) {
+    pub(super) fn send_to_compare(&mut self) {
         let Some((created, _)) = &self.create.created else { return };
         let directory = std::env::temp_dir().join("sf2studio");
         let path: PathBuf = directory.join(format!("{}.sf2", safe_name(&self.create.voicing.name)));

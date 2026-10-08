@@ -21,6 +21,8 @@ jobs:
           components: clippy
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
+      # The guide's screenshot mode.
+      - run: cargo clippy --all-targets --features capture -- -D warnings
       - run: cargo build --release
 
   format:

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="339" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">録音から作る: 1 音につき 1 つの WAV</text>
+<text x="30.0" y="76.0" font-size="13" font-weight="700" fill="#687082" text-anchor="start">鍵盤はファイル名から読み取る</text>
+<rect x="30.0" y="86.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="104.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">C4.wav</text>
+<line x1="206.0" y1="98.0" x2="236.0" y2="98.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="104.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">C4 (60)</text>
+<rect x="30.0" y="116.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="134.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">F#2-loud.wav</text>
+<line x1="206.0" y1="128.0" x2="236.0" y2="128.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="134.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">F♯2</text>
+<rect x="30.0" y="146.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="164.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">Bb5.wav</text>
+<line x1="206.0" y1="158.0" x2="236.0" y2="158.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="164.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">A♯5</text>
+<rect x="30.0" y="176.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="194.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">piano_060.wav</text>
+<line x1="206.0" y1="188.0" x2="236.0" y2="188.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="194.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">C4 (60)</text>
+<rect x="30.0" y="206.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="224.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">take3.wav</text>
+<line x1="206.0" y1="218.0" x2="236.0" y2="218.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="224.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">音程から検出</text>
+<rect x="30.0" y="236.0" width="170.0" height="24.0" rx="6" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<text x="40.0" y="254.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">noise.wav</text>
+<line x1="206.0" y1="248.0" x2="236.0" y2="248.0" stroke="#687082" stroke-width="1.5" marker-end="url(#arrow)" stroke-linecap="round"/>
+<text x="244.0" y="254.0" font-size="12.5" font-weight="700" fill="#1f2430" text-anchor="start">エラー: 鍵盤不明</text>
+<text x="420.0" y="76.0" font-size="13" font-weight="700" fill="#687082" text-anchor="start">各音は周りの鍵盤も受け持つ</text>
+<rect x="420.0" y="120.0" width="450.0" height="44.0" rx="4" fill="#fbfbfc" stroke="#c9ced8" stroke-width="1" />
+<rect x="423.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="438.7" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="449.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="464.6" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="474.9" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="485.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="500.8" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="511.1" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="526.6" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="537.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="547.3" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="562.8" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="573.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="588.7" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="599.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="609.4" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="624.9" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="635.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="650.8" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="661.1" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="671.4" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="687.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="697.3" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="712.8" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="723.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="733.5" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="749.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="759.4" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="774.9" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="785.2" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="795.6" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="811.1" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="821.4" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="837.0" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="847.3" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="857.7" y="120.0" width="4.0" height="26.0" rx="1" fill="#2a2d33" stroke="none" stroke-width="1.5" />
+<rect x="420.0" y="174.0" width="106.0" height="16.0" rx="4" fill="#7c5cff" stroke="none" stroke-width="1.5" />
+<circle cx="497.6" cy="156" r="5" fill="#7c5cff"/>
+<text x="497.6" y="212.0" font-size="12" font-weight="700" fill="#7c5cff" text-anchor="middle">C2</text>
+<rect x="531.2" y="174.0" width="56.9" height="16.0" rx="4" fill="#4084ff" stroke="none" stroke-width="1.5" />
+<circle cx="559.7" cy="156" r="5" fill="#4084ff"/>
+<text x="559.7" y="212.0" font-size="12" font-weight="700" fill="#4084ff" text-anchor="middle">C3</text>
+<rect x="593.3" y="174.0" width="56.9" height="16.0" rx="4" fill="#22a06b" stroke="none" stroke-width="1.5" />
+<circle cx="621.7" cy="156" r="5" fill="#22a06b"/>
+<text x="621.7" y="212.0" font-size="12" font-weight="700" fill="#22a06b" text-anchor="middle">C4</text>
+<rect x="655.3" y="174.0" width="56.9" height="16.0" rx="4" fill="#ffa03c" stroke="none" stroke-width="1.5" />
+<circle cx="683.8" cy="156" r="5" fill="#ffa03c"/>
+<text x="683.8" y="212.0" font-size="12" font-weight="700" fill="#ffa03c" text-anchor="middle">C5</text>
+<rect x="717.4" y="174.0" width="152.6" height="16.0" rx="4" fill="#e8345c" stroke="none" stroke-width="1.5" />
+<circle cx="745.9" cy="156" r="5" fill="#e8345c"/>
+<text x="745.9" y="212.0" font-size="12" font-weight="700" fill="#e8345c" text-anchor="middle">C6</text>
+<text x="420.0" y="244.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="start">受け持つ範囲は隣の録音との中間で分けます。</text>
+<text x="420.0" y="266.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">一番低い音・高い音は鍵盤の端まで広げます。</text>
+<text x="420.0" y="288.0" font-size="12.5" font-weight="400" fill="#687082" text-anchor="start">録音が多いほど、1 つの音を引き伸ばす幅が減ります。</text>
+</svg>

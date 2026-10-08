@@ -12,6 +12,11 @@ pub const REPOSITORY: &str = "https://github.com/albos-inc/sf2studio";
 const LATEST_RELEASE: &str = "https://api.github.com/repos/albos-inc/sf2studio/releases/latest";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// A page of the illustrated guide (`docs/en`, `docs/ja`).
+fn guide(japanese: bool, page: &str) -> String {
+    format!("{REPOSITORY}/blob/main/docs/{}/{page}", if japanese { "ja" } else { "en" })
+}
+
 /// The result of looking for a newer version.
 pub enum UpdateCheck {
     Checking(Receiver<Result<Option<(String, String)>, String>>),
@@ -122,6 +127,17 @@ impl StudioApp {
                         ui.close();
                     }
                     if ui
+                        .button(format!(
+                            "{}  {}",
+                            icon::BOOK_OPEN_TEXT,
+                            t("Open the illustrated guide", "図解ガイドを開く")
+                        ))
+                        .clicked()
+                    {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(guide(japanese, "README.md")));
+                        ui.close();
+                    }
+                    if ui
                         .button(format!("{}  {}", icon::ARROWS_CLOCKWISE, t("Check for updates", "更新を確認")))
                         .clicked()
                     {
@@ -147,7 +163,7 @@ impl StudioApp {
                         ui.close();
                     }
                 });
-                ui.menu_button(RichText::new(self.theme.icon()).size(16.0), |ui| {
+                let theme_menu = ui.menu_button(RichText::new(self.theme.icon()).size(16.0), |ui| {
                     for choice in ThemeChoice::ALL {
                         let label = format!("{}  {}", choice.icon(), choice.name(japanese));
                         if ui.selectable_label(self.theme == choice, label).clicked() {
@@ -156,9 +172,9 @@ impl StudioApp {
                             ui.close();
                         }
                     }
-                })
-                .response
-                .on_hover_text(t("Theme", "テーマ"));
+                });
+                super::mark(ui.ctx(), "theme", 0, theme_menu.response.rect);
+                theme_menu.response.on_hover_text(t("Theme", "テーマ"));
                 ui.menu_button(
                     RichText::new(format!("{}  {}", icon::GLOBE, if japanese { "日本語" } else { "English" })),
                     |ui| {
@@ -204,14 +220,37 @@ impl StudioApp {
         }
 
         let centre = ctx.content_rect().center();
+        let mode = self.mode;
         let mut open = self.chrome.help;
-        egui::Window::new(format!("{}  {}", icon::BOOK_OPEN, t("How to use sf2studio", "sf2studio の使い方")))
+        let window = egui::Window::new(format!("{}  {}", icon::BOOK_OPEN, t("How to use sf2studio", "sf2studio の使い方")))
             .open(&mut open)
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(centre)
             .default_width(560.0)
             .default_height(560.0)
             .show(ctx, |ui| {
+                // The illustrated guide: every screen and setting with
+                // screenshots, and step-by-step recipes.
+                ui.horizontal_wrapped(|ui| {
+                    let open = |ui: &mut egui::Ui, glyph: &str, label: &str, page: &str| {
+                        if ui.button(format!("{glyph}  {label}")).clicked() {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(guide(japanese, page)));
+                        }
+                    };
+                    open(ui, icon::BOOK_OPEN_TEXT, t("Open the illustrated guide", "図解ガイドを開く"), "README.md");
+                    let (page, label) = match mode {
+                        Mode::Create => ("create.md", t("About Create", "作成モードの説明")),
+                        Mode::Tune => ("tune.md", t("About Tune", "調整再生モードの説明")),
+                        Mode::Compare => ("compare.md", t("About Compare", "比較モードの説明")),
+                    };
+                    open(ui, icon::MAP_TRIFOLD, label, page);
+                    open(ui, icon::LIST_CHECKS, t("Recipes: how to…", "やりたいこと別の手順"), "recipes.md");
+                });
+                ui.weak(t(
+                    "The guide opens in your browser: what each screen and setting does, how to read the views, and step-by-step recipes.",
+                    "ガイドはブラウザで開きます。各画面・各設定の働き、表示の見方、目的別の手順を図解しています。",
+                ));
+                ui.separator();
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     help_section(ui, icon::MAGIC_WAND, t("Create", "作成"), &[
                         t("Start from a preset of an SF2, one recording per note, or the built-in synthesis.", "既存の SF2 のプリセット、1 音ずつの録音、または内蔵の合成から始めます。"),
@@ -249,6 +288,9 @@ impl StudioApp {
                     });
                 });
             });
+        if let Some(window) = window {
+            super::mark(ctx, "help-window", 0, window.response.rect);
+        }
         self.chrome.help = open;
 
         let mut open = self.chrome.updates;

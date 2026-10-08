@@ -122,6 +122,7 @@ impl Keyboard {
                 Pos2::new(r.left() + 4.0, r.bottom()),
             );
             painter.rect_filled(bar, 1.0, Color32::from_rgb(255, 200, 60));
+            crate::app::mark(ui.ctx(), "last-note", 0, bar.expand2(Vec2::new(2.0, 0.0)));
         }
 
         // Where the pointer is: key, and the velocity a press there gives.
@@ -131,11 +132,9 @@ impl Keyboard {
             let label = format!("{}  vel {velocity}", key_name(key));
             let at = Pos2::new((p.x + 10.0).min(rect.right() - 90.0), (p.y - 18.0).max(rect.top() + 2.0));
             let galley = painter.layout_no_wrap(label, FontId::proportional(13.0), Color32::WHITE);
-            painter.rect_filled(
-                Rect::from_min_size(at, galley.size()).expand(3.0),
-                3.0,
-                Color32::from_black_alpha(200),
-            );
+            let tip = Rect::from_min_size(at, galley.size()).expand(3.0);
+            painter.rect_filled(tip, 3.0, Color32::from_black_alpha(200));
+            crate::app::mark(ui.ctx(), "hover-tip", 0, tip);
             painter.galley(at, galley, Color32::WHITE);
         }
         events

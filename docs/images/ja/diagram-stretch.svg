@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="329" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">ストレッチ調律</text>
+<rect x="80.0" y="70.0" width="520.0" height="200.0" rx="4" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1" />
+<line x1="80.0" y1="170.0" x2="600.0" y2="170.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="72.0" y="249.0" font-size="11" font-weight="400" fill="#687082" text-anchor="end">-15</text>
+<text x="72.0" y="174.0" font-size="11" font-weight="400" fill="#687082" text-anchor="end">0</text>
+<text x="72.0" y="99.0" font-size="11" font-weight="400" fill="#687082" text-anchor="end">+15</text>
+<line x1="80.0" y1="270.0" x2="80.0" y2="275.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="80.0" y="290.0" font-size="11" font-weight="400" fill="#687082" text-anchor="middle">A0</text>
+<line x1="169.7" y1="270.0" x2="169.7" y2="275.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="169.7" y="290.0" font-size="11" font-weight="400" fill="#687082" text-anchor="middle">C2</text>
+<line x1="313.1" y1="270.0" x2="313.1" y2="275.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="313.1" y="290.0" font-size="11" font-weight="400" fill="#687082" text-anchor="middle">C4</text>
+<line x1="456.6" y1="270.0" x2="456.6" y2="275.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="456.6" y="290.0" font-size="11" font-weight="400" fill="#687082" text-anchor="middle">C6</text>
+<line x1="600.0" y1="270.0" x2="600.0" y2="275.0" stroke="#687082" stroke-width="1" stroke-linecap="round"/>
+<text x="600.0" y="290.0" font-size="11" font-weight="400" fill="#687082" text-anchor="middle">C8</text>
+<path d="M80.0,219.5 L86.0,217.0 L92.0,214.6 L97.9,212.2 L103.9,209.9 L109.9,207.6 L115.9,205.4 L121.8,203.3 L127.8,201.3 L133.8,199.3 L139.8,197.4 L145.7,195.5 L151.7,193.7 L157.7,192.0 L163.7,190.3 L169.7,188.8 L175.6,187.2 L181.6,185.8 L187.6,184.4 L193.6,183.0 L199.5,181.8 L205.5,180.5 L211.5,179.4 L217.5,178.3 L223.4,177.3 L229.4,176.4 L235.4,175.5 L241.4,174.7 L247.4,173.9 L253.3,173.3 L259.3,172.6 L265.3,172.1 L271.3,171.6 L277.2,171.2 L283.2,170.8 L289.2,170.5 L295.2,170.3 L301.1,170.1 L307.1,170.0 L313.1,170.0 L319.1,170.0 L325.1,169.9 L331.0,169.7 L337.0,169.5 L343.0,169.2 L349.0,168.8 L354.9,168.4 L360.9,167.9 L366.9,167.4 L372.9,166.7 L378.9,166.1 L384.8,165.3 L390.8,164.5 L396.8,163.6 L402.8,162.7 L408.7,161.7 L414.7,160.6 L420.7,159.5 L426.7,158.2 L432.6,157.0 L438.6,155.6 L444.6,154.2 L450.6,152.8 L456.6,151.2 L462.5,149.7 L468.5,148.0 L474.5,146.3 L480.5,144.5 L486.4,142.6 L492.4,140.7 L498.4,138.7 L504.4,136.7 L510.3,134.6 L516.3,132.4 L522.3,130.1 L528.3,127.8 L534.3,125.4 L540.2,123.0 L546.2,120.5 L552.2,117.9 L558.2,115.3 L564.1,112.6 L570.1,109.8 L576.1,107.0 L582.1,104.1 L588.0,101.1 L594.0,98.1 L600.0,95.0" stroke="#4084ff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M80.0,120.5 L86.0,123.0 L92.0,125.4 L97.9,127.8 L103.9,130.1 L109.9,132.4 L115.9,134.6 L121.8,136.7 L127.8,138.7 L133.8,140.7 L139.8,142.6 L145.7,144.5 L151.7,146.3 L157.7,148.0 L163.7,149.7 L169.7,151.2 L175.6,152.8 L181.6,154.2 L187.6,155.6 L193.6,157.0 L199.5,158.2 L205.5,159.5 L211.5,160.6 L217.5,161.7 L223.4,162.7 L229.4,163.6 L235.4,164.5 L241.4,165.3 L247.4,166.1 L253.3,166.7 L259.3,167.4 L265.3,167.9 L271.3,168.4 L277.2,168.8 L283.2,169.2 L289.2,169.5 L295.2,169.7 L301.1,169.9 L307.1,170.0 L313.1,170.0 L319.1,170.0 L325.1,170.1 L331.0,170.3 L337.0,170.5 L343.0,170.8 L349.0,171.2 L354.9,171.6 L360.9,172.1 L366.9,172.6 L372.9,173.3 L378.9,173.9 L384.8,174.7 L390.8,175.5 L396.8,176.4 L402.8,177.3 L408.7,178.3 L414.7,179.4 L420.7,180.5 L426.7,181.8 L432.6,183.0 L438.6,184.4 L444.6,185.8 L450.6,187.2 L456.6,188.8 L462.5,190.3 L468.5,192.0 L474.5,193.7 L480.5,195.5 L486.4,197.4 L492.4,199.3 L498.4,201.3 L504.4,203.3 L510.3,205.4 L516.3,207.6 L522.3,209.9 L528.3,212.2 L534.3,214.6 L540.2,217.0 L546.2,219.5 L552.2,222.1 L558.2,224.7 L564.1,227.4 L570.1,230.2 L576.1,233.0 L582.1,235.9 L588.0,238.9 L594.0,241.9 L600.0,245.0" stroke="#ffa03c" stroke-width="2" fill="none" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round" />
+<text x="340.0" y="312.0" font-size="12.5" font-weight="400" fill="#1f2430" text-anchor="middle">鍵盤</text>
+<text x="34" y="170.0" font-size="12.5" fill="#1f2430" text-anchor="middle" transform="rotate(-90 34 170.0)">セント</text>
+<line x1="630.0" y1="85.0" x2="660.0" y2="85.0" stroke="#4084ff" stroke-width="3" stroke-linecap="round"/>
+<text x="670.0" y="90.0" font-size="14" font-weight="700" fill="#1f2430" text-anchor="start">+15 セント</text>
+<text x="670.0" y="110.0" font-size="12" font-weight="400" fill="#687082" text-anchor="start">高音を高めに、低音を低めに。</text>
+<text x="670.0" y="126.2" font-size="12" font-weight="400" fill="#687082" text-anchor="start">調律されたピアノと同じ傾向。</text>
+<line x1="630.0" y1="165.0" x2="660.0" y2="165.0" stroke="#ffa03c" stroke-width="3" stroke-dasharray="6 5" stroke-linecap="round"/>
+<text x="670.0" y="170.0" font-size="14" font-weight="700" fill="#1f2430" text-anchor="start">−15 セント</text>
+<text x="670.0" y="190.0" font-size="12" font-weight="400" fill="#687082" text-anchor="start">逆向き: 高音を低めに、</text>
+<text x="670.0" y="206.2" font-size="12" font-weight="400" fill="#687082" text-anchor="start">低音を高めに。</text>
+<text x="630.0" y="250.0" font-size="12" font-weight="400" fill="#687082" text-anchor="start">中央の C はそのまま。端に</text>
+<text x="630.0" y="266.2" font-size="12" font-weight="400" fill="#687082" text-anchor="start">行くほど大きくずらします。</text>
+</svg>

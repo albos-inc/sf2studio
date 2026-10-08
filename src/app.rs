@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use sf2synth::Synthesizer;
 
+#[cfg(feature = "capture")]
+mod capture;
 mod chrome;
 mod create_ui;
 
@@ -249,12 +251,29 @@ pub struct StudioApp {
     live_created: Option<u64>,
     chrome: chrome::Chrome,
     theme: crate::theme::ThemeChoice,
+    /// Taking the guide's screenshots (`--capture`).
+    #[cfg(feature = "capture")]
+    capture: Option<capture::Capture>,
+}
+
+/// Names an area for the guide's screenshots (`--features capture`).
+pub(crate) fn mark(ctx: &egui::Context, name: &'static str, index: usize, rect: Rect) {
+    #[cfg(feature = "capture")]
+    capture::mark(ctx, name, index, rect);
+    #[cfg(not(feature = "capture"))]
+    let _ = (ctx, name, index, rect);
 }
 
 impl StudioApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> StudioApp {
         crate::theme::install(&cc.egui_ctx);
-        let mut saved: Saved = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
+        #[cfg(feature = "capture")]
+        let capture = capture::Capture::from_arguments();
+        #[cfg(feature = "capture")]
+        let stored = cc.storage.filter(|_| capture.is_none());
+        #[cfg(not(feature = "capture"))]
+        let stored = cc.storage;
+        let mut saved: Saved = stored.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
         apply_arguments(&mut saved, std::env::args().skip(1));
         let (player, player_error) = match Player::new() {
             Ok(player) => (Some(player), None),
@@ -295,6 +314,8 @@ impl StudioApp {
             live_created: None,
             chrome: chrome::Chrome::default(),
             theme: saved.theme,
+            #[cfg(feature = "capture")]
+            capture,
         };
         app.theme.apply(&cc.egui_ctx);
         // `--show help|about|updates` opens that window at launch.
@@ -611,7 +632,8 @@ impl StudioApp {
             {
                 self.seek(0.0);
             }
-            ui.monospace(format!("{} / {}", clock(position), clock(duration)));
+            let time = ui.monospace(format!("{} / {}", clock(position), clock(duration)));
+            mark(ui.ctx(), "clock", 0, time.rect);
             ui.separator();
             if self.mode == Mode::Compare {
                 let blind = self.t("Blind test", "ブラインドテスト");
@@ -665,7 +687,9 @@ impl StudioApp {
             let looping = self.with_transport(|t| t.loop_range).flatten();
             if let Some((start, end)) = looping {
                 let rate = self.sample_rate as f64;
-                ui.label(format!("{}  {}–{}", icon::REPEAT, clock(start as f64 / rate), clock(end as f64 / rate)));
+                let label =
+                    ui.label(format!("{}  {}–{}", icon::REPEAT, clock(start as f64 / rate), clock(end as f64 / rate)));
+                mark(ui.ctx(), "loop-label", 0, label.rect);
                 if ui.small_button(icon::X).clicked() {
                     self.with_transport(|t| t.loop_range = None);
                 }
@@ -673,6 +697,7 @@ impl StudioApp {
             let meter = self.with_transport(|t| t.meter).unwrap_or(0.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let (rect, _) = ui.allocate_exact_size(Vec2::new(120.0, 10.0), Sense::hover());
+                mark(ui.ctx(), "meter", 0, rect);
                 let level = ((to_db(meter) + 60.0) / 60.0).clamp(0.0, 1.0);
                 ui.painter().rect_filled(rect, 2.0, Color32::from_gray(40));
                 let mut filled = rect;
@@ -771,9 +796,9 @@ impl StudioApp {
                 Source::Wav { .. } => Vec::new(),
             };
             let lane = &mut self.lanes[i];
-            egui::Frame::group(ui.style()).stroke(Stroke::new(1.0, LANE_COLORS[i].gamma_multiply(0.6))).show(
-                ui,
-                |ui| {
+            let frame = egui::Frame::group(ui.style())
+                .stroke(Stroke::new(1.0, LANE_COLORS[i].gamma_multiply(0.6)))
+                .show(ui, |ui| {
                     // Synthesizer.
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(lane_letter(i)).color(LANE_COLORS[i]).strong().size(18.0));
@@ -954,8 +979,8 @@ impl StudioApp {
                             analysis.brightness_hz(),
                         ));
                     }
-                },
-            );
+                });
+            mark(ui.ctx(), "lane", i, frame.response.rect);
         }
         if let Some(i) = remove
             && self.lanes.len() > 1
@@ -1280,6 +1305,7 @@ impl StudioApp {
         ui.add_space(4.0);
         let fixed = self.keyboard_settings.fixed_velocity.then_some(self.keyboard_settings.velocity);
         let accent = LANE_COLORS[self.focus.min(MAX_LANES - 1)];
+        mark(ui.ctx(), "keyboard", 0, ui.available_rect_before_wrap());
         let events = self.keyboard.show(ui, fixed, &self.midi_sounding, self.last_note, accent);
         for event in events {
             match event {
@@ -1327,6 +1353,7 @@ impl StudioApp {
         let japanese = self.japanese;
         let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
         let relative = self.layers.relative;
+        let top = ui.cursor().top();
 
         // Per lane, per key with at least three velocities: (velocity, level, brightness) sorted.
         let mut sweeps: Vec<Sweep> = Vec::new();
@@ -1394,7 +1421,7 @@ impl StudioApp {
             {
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new(if japanese { title_ja } else { title_en }).small().strong());
-                    Plot::new(("measure", chart))
+                    let plot = Plot::new(("measure", chart))
                         .width(width)
                         .height(height)
                         .legend(Legend::default())
@@ -1420,11 +1447,12 @@ impl StudioApp {
                                 );
                             }
                         });
+                    mark(ui.ctx(), "chart", chart, plot.response.rect);
                 });
             }
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new(t("Decay per key", "鍵盤ごとの減衰")).small().strong());
-                Plot::new(("measure", 2))
+                let plot = Plot::new(("measure", 2))
                     .width(width)
                     .height(height)
                     .legend(Legend::default())
@@ -1447,6 +1475,7 @@ impl StudioApp {
                             );
                         }
                     });
+                mark(ui.ctx(), "chart", 2, plot.response.rect);
             });
         });
         ui.horizontal(|ui| {
@@ -1455,6 +1484,8 @@ impl StudioApp {
                 "左: ベロシティ → ピーク音量 · 中: ベロシティ → 明るさ（スペクトル重心） · 右: 鍵盤ごとの減衰時間。線の種類で鍵盤を区別しています。",
             ));
         });
+        let area = Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.cursor().top());
+        mark(ui.ctx(), "measure", 0, area);
         ui.separator();
     }
 
@@ -1463,7 +1494,7 @@ impl StudioApp {
     /// Toggles for what the timeline shows.
     fn layers_bar(&mut self, ui: &mut egui::Ui) {
         let japanese = self.japanese;
-        ui.horizontal(|ui| {
+        let bar = ui.horizontal_wrapped(|ui| {
             ui.label(if japanese { "表示:" } else { "Show:" });
             ui.toggle_value(
                 &mut self.layers.spectrogram,
@@ -1488,6 +1519,7 @@ impl StudioApp {
                 );
             }
         });
+        mark(ui.ctx(), "layers", 0, bar.response.rect);
     }
 
     fn timeline(&mut self, ui: &mut egui::Ui) {
@@ -1522,6 +1554,7 @@ impl StudioApp {
         let (rect, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, Color32::from_gray(18));
+        mark(ui.ctx(), "timeline", 0, rect);
 
         let ruler_height = 20.0;
         let closeup_height = if self.layers.closeup { (rect.height() * 0.22).clamp(80.0, 180.0) } else { 0.0 };
@@ -1535,6 +1568,10 @@ impl StudioApp {
             Pos2::new(rect.right(), rect.bottom() - closeup_height - 6.0),
         );
         let lane_height = lanes_rect.height() / self.lanes.len().max(1) as f32;
+        mark(ui.ctx(), "ruler", 0, Rect::from_min_size(rect.min, Vec2::new(rect.width(), ruler_height)));
+        if roll_height > 0.0 {
+            mark(ui.ctx(), "roll", 0, roll_rect);
+        }
         let (view_start, view_span) = (self.view.start, self.view.span);
         let to_x = |t: f64| rect.left() + ((t - view_start) / view_span) as f32 * rect.width();
         let to_t = |x: f32| view_start + ((x - rect.left()) / rect.width()) as f64 * view_span;
@@ -1602,6 +1639,7 @@ impl StudioApp {
             let alpha = (40.0 + velocity as f32 / 127.0 * 160.0) as u8;
             let band = Rect::from_x_y_ranges(x0..=x1.max(x0 + 2.0), rect.top() + 2.0..=rect.top() + ruler_height - 2.0);
             painter.rect_filled(band, 2.0, Color32::from_rgba_unmultiplied(255, 200, 60, alpha));
+            mark(ui.ctx(), "note-band", 0, band);
             painter.text(
                 band.left_center() + Vec2::new(4.0, 0.0),
                 Align2::LEFT_CENTER,
@@ -1622,17 +1660,20 @@ impl StudioApp {
             let rate = self.sample_rate as f64;
             let r = Rect::from_x_y_ranges(to_x(start as f64 / rate)..=to_x(end as f64 / rate), lanes_rect.y_range());
             painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 24));
+            mark(ui.ctx(), "loop", 0, r);
         }
         let x = to_x(position);
         painter.line_segment(
             [Pos2::new(x, rect.top()), Pos2::new(x, lanes_rect.bottom())],
             Stroke::new(1.5, Color32::WHITE),
         );
+        mark(ui.ctx(), "playhead", 0, Rect::from_x_y_ranges(x - 2.0..=x + 2.0, rect.top()..=lanes_rect.bottom()));
 
         // Close-up of the waveforms at the playhead.
         let closeup = Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - closeup_height), rect.right_bottom());
         if self.layers.closeup {
             self.draw_closeup(&painter, closeup, position, &heard);
+            mark(ui.ctx(), "closeup", 0, closeup);
         }
 
         // Interaction.
@@ -1736,6 +1777,8 @@ impl StudioApp {
         let layers = self.layers;
         let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 18.0));
         let body = Rect::from_min_max(Pos2::new(rect.left(), header.bottom()), rect.max);
+        mark(ctx, "lane-header", index, header);
+        mark(ctx, "lane-body", index, body);
         painter.rect_filled(header, 0.0, if heard { color.gamma_multiply(0.35) } else { Color32::from_gray(30) });
         let effective = self.effective_source(index);
         let source = match &effective {
@@ -1810,6 +1853,12 @@ impl StudioApp {
         if let (true, Program::Note { key, .. }) = (layers.spectrogram, &self.program) {
             let fundamental = key_hz(*key);
             let span = (SPECTRUM_HIGH_HZ / SPECTRUM_LOW_HZ).ln();
+            let y_of = |f: f32| body.bottom() - (f / SPECTRUM_LOW_HZ).ln() / span * body.height();
+            let labels = Rect::from_x_y_ranges(
+                body.left()..=body.left() + 56.0,
+                y_of((fundamental * 8.0).min(SPECTRUM_HIGH_HZ)) - 10.0..=y_of(fundamental) + 2.0,
+            );
+            mark(ctx, "harmonics", index, labels);
             for n in 1..=16 {
                 let f = fundamental * n as f32;
                 if !(SPECTRUM_LOW_HZ..SPECTRUM_HIGH_HZ).contains(&f) {
@@ -1853,8 +1902,15 @@ impl StudioApp {
             points.push(Pos2::new(body.left() + px as f32, y));
         }
         painter.add(Shape::line(points, Stroke::new(1.5, color)));
+        let scale = |db: f32| body.bottom() - ((db + 72.0) / 72.0) * body.height();
+        mark(
+            ctx,
+            "level-scale",
+            index,
+            Rect::from_x_y_ranges(body.right() - 26.0..=body.right(), scale(-12.0) - 7.0..=scale(-48.0) + 7.0),
+        );
         for db in [-12.0, -24.0, -48.0] {
-            let y = body.bottom() - ((db + 72.0) / 72.0) * body.height();
+            let y = scale(db);
             painter.text(
                 Pos2::new(body.right() - 4.0, y),
                 Align2::RIGHT_CENTER,
@@ -1923,47 +1979,56 @@ impl StudioApp {
 
 impl eframe::App for StudioApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        #[cfg(feature = "capture")]
+        self.capture_before(ui.ctx());
         self.poll_renders();
         self.ensure_live();
         self.poll_midi();
         self.tick_note();
         self.handle_keys(ui.ctx());
-        egui::Panel::top("top").show(ui, |ui| {
+        let panel = egui::Panel::top("top").show(ui, |ui| {
             ui.add_space(4.0);
             self.top_bar(ui);
             ui.add_space(4.0);
         });
+        mark(ui.ctx(), "top", 0, panel.response.rect);
         if self.mode != Mode::Create {
-            egui::Panel::bottom("transport").show(ui, |ui| {
+            let panel = egui::Panel::bottom("transport").show(ui, |ui| {
                 ui.add_space(4.0);
                 self.transport_bar(ui);
                 ui.add_space(4.0);
             });
+            mark(ui.ctx(), "transport", 0, panel.response.rect);
         }
         if matches!(self.mode, Mode::Tune | Mode::Create) {
-            egui::Panel::bottom("keyboard").resizable(true).default_size(210.0).min_size(120.0).show(ui, |ui| {
-                ui.add_space(4.0);
-                self.keyboard_ui(ui);
-            });
+            let panel =
+                egui::Panel::bottom("keyboard").resizable(true).default_size(210.0).min_size(120.0).show(ui, |ui| {
+                    ui.add_space(4.0);
+                    self.keyboard_ui(ui);
+                });
+            mark(ui.ctx(), "keyboard-panel", 0, panel.response.rect);
         }
         if self.mode == Mode::Create {
-            egui::Panel::left("origin").resizable(true).default_size(300.0).show(ui, |ui| {
+            let panel = egui::Panel::left("origin").resizable(true).default_size(300.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.origin_ui(ui));
             });
+            mark(ui.ctx(), "left", 0, panel.response.rect);
         }
         if self.mode != Mode::Create {
-            egui::Panel::left("lanes").resizable(true).default_size(280.0).show(ui, |ui| {
+            let panel = egui::Panel::left("lanes").resizable(true).default_size(280.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     self.program_ui(ui);
                     ui.separator();
                     self.lanes_ui(ui);
                 });
             });
+            mark(ui.ctx(), "left", 0, panel.response.rect);
         }
         if self.mode == Mode::Tune {
-            egui::Panel::right("tuning").resizable(true).default_size(300.0).show(ui, |ui| {
+            let panel = egui::Panel::right("tuning").resizable(true).default_size(300.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.tuning_ui(ui));
             });
+            mark(ui.ctx(), "right", 0, panel.response.rect);
         }
         if self.mode == Mode::Compare && self.abx.open {
             let count = self.lanes.len();
@@ -1976,12 +2041,15 @@ impl eframe::App for StudioApp {
                 });
             }
         }
-        egui::CentralPanel::default().show(ui, |ui| match self.mode {
+        let panel = egui::CentralPanel::default().show(ui, |ui| match self.mode {
             Mode::Create => self.create_ui(ui),
             Mode::Tune | Mode::Compare => self.timeline(ui),
         });
+        mark(ui.ctx(), "central", 0, panel.response.rect);
         self.poll_create(ui.ctx());
         self.chrome_windows(ui.ctx());
+        #[cfg(feature = "capture")]
+        self.capture_after(ui.ctx());
         if self.is_playing()
             || self.create.busy()
             || self.pending_render.is_some()
@@ -1993,6 +2061,10 @@ impl eframe::App for StudioApp {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        #[cfg(feature = "capture")]
+        if self.capture.is_some() {
+            return;
+        }
         let saved = Saved {
             japanese: self.japanese,
             mode: self.mode,
@@ -2006,6 +2078,18 @@ impl eframe::App for StudioApp {
             theme: self.theme,
         };
         eframe::set_value(storage, eframe::APP_KEY, &saved);
+    }
+
+    #[cfg(feature = "capture")]
+    fn persist_egui_memory(&self) -> bool {
+        self.capture.is_none()
+    }
+
+    #[cfg(feature = "capture")]
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if let Some(capture) = &mut self.capture {
+            capture.input(raw_input);
+        }
     }
 }
 

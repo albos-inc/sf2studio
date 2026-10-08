@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, 'Segoe UI', 'Noto Sans CJK JP', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#687082"/></marker><linearGradient id="heat" x1="0" y1="1" x2="0" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="heat-x" x1="0" y1="0" x2="1" y2="0"><stop offset="0.00" stop-color="#000004"/><stop offset="0.25" stop-color="#3c0f6e"/><stop offset="0.50" stop-color="#b43264"/><stop offset="0.75" stop-color="#fa8c28"/><stop offset="1.00" stop-color="#fcfabe"/></linearGradient><linearGradient id="press" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4084ff" stop-opacity="0.08"/><stop offset="1" stop-color="#4084ff" stop-opacity="0.75"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="899" height="319" rx="16" fill="#ffffff" stroke="#d9dde5"/>
+<text x="30.0" y="40.0" font-size="19" font-weight="700" fill="#1f2430" text-anchor="start">Tune: play, look, adjust</text>
+<rect x="30.0" y="70.0" width="190.0" height="150.0" rx="12" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<circle cx="54" cy="96" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="54.0" y="101.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="74.0" y="101.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">Press a key</text>
+<text x="48.0" y="132.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">You hear it at once,</text>
+<text x="48.0" y="148.2" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">through the lane</text>
+<text x="48.0" y="164.4" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">you are tuning.</text>
+<line x1="224.0" y1="145.0" x2="244.0" y2="145.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<rect x="250.0" y="70.0" width="190.0" height="150.0" rx="12" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<circle cx="274" cy="96" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="274.0" y="101.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="294.0" y="101.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">Release</text>
+<text x="268.0" y="132.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">The note is rendered</text>
+<text x="268.0" y="148.2" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">in every lane.</text>
+<line x1="444.0" y1="145.0" x2="464.0" y2="145.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<rect x="470.0" y="70.0" width="190.0" height="150.0" rx="12" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<circle cx="494" cy="96" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="494.0" y="101.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="514.0" y="101.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">Look</text>
+<text x="488.0" y="132.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">Spectrogram, harmonics</text>
+<text x="488.0" y="148.2" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">and level, lane</text>
+<text x="488.0" y="164.4" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">by lane.</text>
+<line x1="664.0" y1="145.0" x2="684.0" y2="145.0" stroke="#687082" stroke-width="2" marker-end="url(#arrow)" stroke-linecap="round"/>
+<rect x="690.0" y="70.0" width="190.0" height="150.0" rx="12" fill="#f4f6f9" stroke="#d9dde5" stroke-width="1.5" />
+<circle cx="714" cy="96" r="12" fill="#4084ff" stroke="#fff" stroke-width="2"/>
+<text x="714.0" y="101.0" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+<text x="734.0" y="101.0" font-size="14.5" font-weight="700" fill="#1f2430" text-anchor="start">Adjust</text>
+<text x="708.0" y="132.0" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">Change a setting:</text>
+<text x="708.0" y="148.2" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">the lane renders</text>
+<text x="708.0" y="164.4" font-size="12" font-weight="400" fill="#1f2430" text-anchor="start">again 0.25 s later.</text>
+<path d="M785,224 C785,275 125,275 125,226" stroke="#687082" stroke-width="1.5" fill="none" stroke-dasharray="5 5" marker-end="url(#arrow)" stroke-linecap="round" stroke-linejoin="round" />
+<text x="455.0" y="296.0" font-size="12" font-weight="400" fill="#687082" text-anchor="middle">play the same key again to hear the change</text>
+</svg>
