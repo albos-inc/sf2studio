@@ -34,6 +34,11 @@ impl VelocityCurve {
     }
 }
 
+/// The output gain to start from: sf2synth 0.1's default master gain (0.5),
+/// 6 dB below its current one (1.0), which earlier comparisons and saved
+/// levels were made at.
+pub const DEFAULT_MASTER_GAIN_DB: f32 = -6.0206;
+
 /// What the tuning screen changes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -67,7 +72,7 @@ impl Default for SynthTuning {
     fn default() -> Self {
         let defaults = SynthesizerSettings::default();
         SynthTuning {
-            master_gain_db: 20.0 * defaults.master_gain.log10(),
+            master_gain_db: DEFAULT_MASTER_GAIN_DB,
             velocity_range_cb: 960.0,
             velocity_curve: VelocityCurve::Concave,
             velocity_filter_cents: -2400.0,
@@ -135,7 +140,7 @@ mod tests {
         let tuned = SynthTuning::default().settings(48000);
         let defaults = SynthesizerSettings::new(48000);
         assert_eq!(tuned.default_modulators, defaults.default_modulators);
-        assert!((tuned.master_gain - defaults.master_gain).abs() < 1e-5);
+        assert!((tuned.master_gain - 0.5).abs() < 1e-5);
     }
 
     #[test]
