@@ -24,6 +24,7 @@ use crate::gm;
 use crate::keyboard::{KeyEvent, Keyboard};
 use crate::measure::{self, DECAY_DB, Note, NoteMeasure};
 use crate::midi_in::MidiIn;
+use crate::null_test::{self, NullTest};
 use crate::patterns::{NOTE_START, TestPattern, key_hz, key_name};
 use crate::render::{Engine, Job, Program, Renderer, Sound, SoundFile, Source};
 use crate::theme::{icon, labeled};
@@ -109,11 +110,44 @@ struct Layers {
     piano_roll: bool,
     /// Charts relative to each key's loudest / brightest note.
     relative: bool,
+    /// The null test: one lane minus another (Compare mode).
+    null_test: bool,
 }
 
 impl Default for Layers {
     fn default() -> Self {
-        Layers { spectrogram: true, envelope: true, closeup: true, measure: true, piano_roll: true, relative: true }
+        Layers {
+            spectrogram: true,
+            envelope: true,
+            closeup: true,
+            measure: true,
+            piano_roll: true,
+            relative: true,
+            null_test: false,
+        }
+    }
+}
+
+/// The lanes (ids and generations) and gains a null test was made from.
+type NullKey = (u64, u64, u64, u64, u32, u32);
+
+/// The null test's choices and its result.
+struct NullState {
+    /// The lanes compared: a − b.
+    a: usize,
+    b: usize,
+    /// Level-match the lanes before subtracting.
+    level_match: bool,
+    /// Hear the difference instead of the lanes.
+    listen: bool,
+    /// Gain the difference is heard with, dB.
+    boost_db: f32,
+    result: Option<(NullKey, Arc<NullTest>)>,
+}
+
+impl Default for NullState {
+    fn default() -> Self {
+        NullState { a: 0, b: 1, level_match: false, listen: false, boost_db: 0.0, result: None }
     }
 }
 
@@ -246,6 +280,7 @@ pub struct StudioApp {
     /// The program's notes, for the measurements.
     program_notes: Option<(Program, Arc<Vec<Note>>)>,
     abx: Abx,
+    null: NullState,
     create: create_ui::CreateState,
     /// The generation of the created instrument the live synthesizer plays.
     live_created: Option<u64>,
@@ -310,6 +345,7 @@ impl StudioApp {
             fit_view: false,
             program_notes: None,
             abx: Abx::new(),
+            null: NullState::default(),
             create: create_ui::CreateState::new(saved.origin, saved.voicing),
             live_created: None,
             chrome: chrome::Chrome::default(),
@@ -456,16 +492,21 @@ impl StudioApp {
 
     fn sync_player(&mut self) {
         let gains = self.gains();
-        let heard = self.heard();
+        let difference = self
+            .null_result()
+            .map(|test| LaneAudio { audio: Arc::clone(&test.difference), gain: 10f32.powf(self.null.boost_db / 20.0) });
+        let heard = self.transport_outputs();
         let Some(player) = &self.player else { return };
         let mut transport = player.transport.lock().unwrap();
-        transport.set_lanes(
-            self.lanes
-                .iter()
-                .zip(&gains)
-                .map(|(l, &gain)| l.audio.as_ref().map(|audio| LaneAudio { audio: Arc::clone(audio), gain }))
-                .collect(),
-        );
+        // The lanes, then the null test's difference.
+        let mut lanes: Vec<Option<LaneAudio>> = self
+            .lanes
+            .iter()
+            .zip(&gains)
+            .map(|(l, &gain)| l.audio.as_ref().map(|audio| LaneAudio { audio: Arc::clone(audio), gain }))
+            .collect();
+        lanes.push(difference);
+        transport.set_lanes(lanes);
         transport.set_outputs(&heard);
         let focus_gain = gains.get(self.focus).copied().unwrap_or(1.0);
         if let Some(live) = &mut transport.live {
@@ -474,17 +515,58 @@ impl StudioApp {
     }
 
     /// The lanes heard: the focused one when tuning, the checked ones when
-    /// comparing.
+    /// comparing (none while the null test's difference is heard).
     fn heard(&self) -> Vec<bool> {
         match self.mode {
+            Mode::Compare if self.hearing_difference() => vec![false; self.lanes.len()],
             Mode::Compare => self.outputs.clone(),
             _ => (0..self.lanes.len()).map(|i| i == self.focus).collect(),
         }
     }
 
+    /// Whether the null test's difference is heard instead of the lanes.
+    fn hearing_difference(&self) -> bool {
+        self.mode == Mode::Compare && self.layers.null_test && self.null.listen && !self.concealed()
+    }
+
+    /// What the transport plays: the lanes heard, then the difference.
+    fn transport_outputs(&self) -> Vec<bool> {
+        let mut outputs = self.heard();
+        outputs.push(self.hearing_difference());
+        outputs
+    }
+
     fn push_outputs(&self) {
-        let heard = self.heard();
-        self.with_transport(|t| t.set_outputs(&heard));
+        let outputs = self.transport_outputs();
+        self.with_transport(|t| t.set_outputs(&outputs));
+    }
+
+    /// The null test of the chosen lanes, made again when they change.
+    fn null_result(&mut self) -> Option<Arc<NullTest>> {
+        if self.mode != Mode::Compare || !self.layers.null_test {
+            return None;
+        }
+        let (a, b) = (self.null.a, self.null.b);
+        if a == b || a >= self.lanes.len() || b >= self.lanes.len() {
+            return None;
+        }
+        let (gain_a, gain_b) = if self.null.level_match {
+            let gains = self.gains();
+            (gains[a], gains[b])
+        } else {
+            (1.0, 1.0)
+        };
+        let (la, lb) = (&self.lanes[a], &self.lanes[b]);
+        let (Some(audio_a), Some(audio_b)) = (&la.audio, &lb.audio) else { return None };
+        let key = (la.id, la.generation, lb.id, lb.generation, gain_a.to_bits(), gain_b.to_bits());
+        if let Some((made_for, test)) = &self.null.result
+            && *made_for == key
+        {
+            return Some(Arc::clone(test));
+        }
+        let test = Arc::new(null_test::compare(audio_a, audio_b, gain_a, gain_b));
+        self.null.result = Some((key, Arc::clone(&test)));
+        Some(test)
     }
 
     // MARK: - Transport
@@ -770,14 +852,17 @@ impl StudioApp {
             Source::Wav { .. } => None,
         });
         for i in 0..self.lanes.len() {
-            // The presets of the lane's file, for the preset menu.
+            // The presets of the lane's file, for the preset menu, and what
+            // loading it left out (SFZ opcodes ignored, samples missing).
             let effective = self.effective_source(i);
+            let mut warnings: Vec<String> = Vec::new();
             let presets: Vec<(u16, u8, String)> = match &effective {
                 Source::Synth { engine: Engine::Sf2synth, sound, .. } => sound
                     .file
                     .path()
                     .and_then(|p| self.renderer.font(&p).ok())
                     .map(|font| {
+                        warnings = font.warnings().to_vec();
                         let mut list: Vec<(u16, u8, String)> = font
                             .presets()
                             .iter()
@@ -877,11 +962,14 @@ impl StudioApp {
                                         if ui
                                             .selectable_label(
                                                 false,
-                                                t("Choose a file (SF2 / DLS)…", "ファイルを選ぶ（SF2 / DLS）…"),
+                                                t(
+                                                    "Choose a file (SF2 / DLS / SFZ)…",
+                                                    "ファイルを選ぶ（SF2 / DLS / SFZ）…",
+                                                ),
                                             )
                                             .clicked()
                                             && let Some(path) = rfd::FileDialog::new()
-                                                .add_filter("SF2 / DLS", &["sf2", "dls"])
+                                                .add_filter("SF2 / DLS / SFZ", &["sf2", "dls", "sfz"])
                                                 .pick_file()
                                         {
                                             self.renderer.forget_font(&path);
@@ -978,6 +1066,14 @@ impl StudioApp {
                             t("brightness", "明るさ"),
                             analysis.brightness_hz(),
                         ));
+                    }
+                    if !warnings.is_empty() {
+                        let summary = if japanese {
+                            format!("{} 読み込みで {} 件を省略", icon::WARNING, warnings.len())
+                        } else {
+                            format!("{} {} left out on loading", icon::WARNING, warnings.len())
+                        };
+                        ui.colored_label(Color32::from_rgb(255, 190, 90), summary).on_hover_text(warnings.join("\n"));
                     }
                 });
             mark(ui.ctx(), "lane", i, frame.response.rect);
@@ -1517,9 +1613,116 @@ impl StudioApp {
                     &mut self.layers.measure,
                     labeled(icon::CHART_SCATTER, if japanese { "計測グラフ" } else { "Measurements" }),
                 );
+                if ui
+                    .toggle_value(
+                        &mut self.layers.null_test,
+                        labeled(icon::SUBTRACT, if japanese { "ヌルテスト（差分）" } else { "Null test" }),
+                    )
+                    .on_hover_text(if japanese {
+                        "2 つのレーンの差（A − B）を表示し、聞くこともできます。完全に一致すれば差は 0 です。"
+                    } else {
+                        "Shows (and plays) the difference of two lanes, A − B: nothing at all if they're identical."
+                    })
+                    .changed()
+                {
+                    self.sync_player();
+                }
             }
         });
         mark(ui.ctx(), "layers", 0, bar.response.rect);
+    }
+
+    /// The null test's choices and verdict (Compare mode).
+    fn null_ui(&mut self, ui: &mut egui::Ui) {
+        let japanese = self.japanese;
+        let t = |en: &'static str, ja: &'static str| if japanese { ja } else { en };
+        let count = self.lanes.len();
+        if count < 2 {
+            ui.weak(t("Add a second lane to compare.", "比べるにはレーンをもう 1 つ追加してください。"));
+            ui.separator();
+            return;
+        }
+        self.null.a = self.null.a.min(count - 1);
+        self.null.b = self.null.b.min(count - 1);
+        let before = (self.null.a, self.null.b, self.null.level_match, self.null.listen, self.null.boost_db);
+        let top = ui.cursor().top();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(crate::theme::section(t("Null test", "ヌルテスト")));
+            for (which, id) in [(0, "null-a"), (1, "null-b")] {
+                if which == 1 {
+                    ui.label("−");
+                }
+                let lane = if which == 0 { &mut self.null.a } else { &mut self.null.b };
+                egui::ComboBox::from_id_salt(id).width(44.0).selected_text(lane_letter(*lane).to_string()).show_ui(
+                    ui,
+                    |ui| {
+                        for i in 0..count {
+                            ui.selectable_value(lane, i, lane_letter(i).to_string());
+                        }
+                    },
+                );
+            }
+            ui.checkbox(&mut self.null.level_match, t("Match levels first", "先に音量を揃える"));
+            ui.toggle_value(&mut self.null.listen, labeled(icon::HEADPHONES, t("Hear the difference", "差分を聞く")));
+            ui.add_enabled(
+                self.null.listen,
+                egui::Slider::new(&mut self.null.boost_db, 0.0..=60.0).suffix(" dB").text(t("boost", "増幅")),
+            );
+        });
+        if (self.null.a, self.null.b, self.null.level_match, self.null.listen, self.null.boost_db) != before {
+            self.sync_player();
+        }
+        let (a, b) = (lane_letter(self.null.a), lane_letter(self.null.b));
+        let result = self.null_result();
+        ui.horizontal_wrapped(|ui| match &result {
+            _ if self.null.a == self.null.b => {
+                ui.weak(t("Choose two different lanes.", "違うレーンを 2 つ選んでください。"));
+            }
+            None => {
+                ui.weak(t("Waiting for both lanes to render…", "両方のレーンの書き出しを待っています…"));
+            }
+            Some(test) if test.identical() => {
+                ui.colored_label(
+                    Color32::from_rgb(110, 210, 120),
+                    egui::RichText::new(if japanese {
+                        format!("{icon} {a} と {b} は完全に一致（ビット単位で同一、差は 0）", icon = icon::CHECK_CIRCLE)
+                    } else {
+                        format!("{icon} {a} and {b} are bit-identical (the difference is 0)", icon = icon::CHECK_CIRCLE)
+                    })
+                    .strong(),
+                );
+            }
+            Some(test) => {
+                let share = test.differing as f64 / test.samples.max(1) as f64 * 100.0;
+                let peak = test.peak_db.unwrap_or(null_test::FLOOR_DB);
+                let depth = test.depth_db.map_or("—".to_string(), |d| format!("{d:+.1} dB"));
+                ui.colored_label(
+                    Color32::from_rgb(255, 190, 90),
+                    if japanese {
+                        format!("{a} − {b}: 差のピーク {peak:.1} dBFS · 差の音量 {depth}（{a} 基準） · {share:.2}% のサンプルが異なる")
+                    } else {
+                        format!("{a} − {b}: difference peaks at {peak:.1} dBFS · {depth} relative to {a} · {share:.2}% of samples differ")
+                    },
+                );
+                if let Some(first) = test.first
+                    && ui
+                        .small_button(labeled(icon::CROSSHAIR, &format!("{} {}", t("First difference at", "最初の差"), clock(first))))
+                        .clicked()
+                {
+                    self.seek(first);
+                    let span = self.view.span.min(1.0);
+                    self.view.start = (first - span * 0.2).max(0.0);
+                    self.view.span = span;
+                    self.view.follow = false;
+                }
+                if test.lengths.0 != test.lengths.1 {
+                    ui.weak(t("(the lanes differ in length)", "（レーンの長さが違います）"));
+                }
+            }
+        });
+        let area = Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.cursor().top());
+        mark(ui.ctx(), "null", 0, area);
+        ui.separator();
     }
 
     fn timeline(&mut self, ui: &mut egui::Ui) {
@@ -1531,8 +1734,8 @@ impl StudioApp {
         if duration <= 0.0 {
             ui.centered_and_justified(|ui| {
                 ui.label(self.t(
-                    "Choose an SF2 (or WAV) for a lane on the left to start.",
-                    "左のレーンで SF2（または WAV）を選ぶと始まります。",
+                    "Choose an SF2 or SFZ (or a WAV) for a lane on the left to start.",
+                    "左のレーンで SF2 や SFZ（または WAV）を選ぶと始まります。",
                 ));
             });
             return;
@@ -1550,6 +1753,12 @@ impl StudioApp {
         if self.mode == Mode::Compare && self.layers.measure {
             self.measure_ui(ui);
         }
+        let null = if self.mode == Mode::Compare && self.layers.null_test && !self.concealed() {
+            self.null_ui(ui);
+            self.null_result()
+        } else {
+            None
+        };
         let available = ui.available_size();
         let (rect, response) = ui.allocate_exact_size(available, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
@@ -1559,13 +1768,18 @@ impl StudioApp {
         let ruler_height = 20.0;
         let closeup_height = if self.layers.closeup { (rect.height() * 0.22).clamp(80.0, 180.0) } else { 0.0 };
         let roll_height = if self.layers.piano_roll && !notes.is_empty() { 64.0 } else { 0.0 };
+        let null_height = if null.is_some() { 64.0 } else { 0.0 };
         let roll_rect = Rect::from_min_size(
             Pos2::new(rect.left(), rect.top() + ruler_height),
             Vec2::new(rect.width(), roll_height),
         );
         let lanes_rect = Rect::from_min_max(
             Pos2::new(rect.left(), rect.top() + ruler_height + roll_height),
-            Pos2::new(rect.right(), rect.bottom() - closeup_height - 6.0),
+            Pos2::new(rect.right(), rect.bottom() - closeup_height - null_height - 6.0),
+        );
+        let null_rect = Rect::from_min_max(
+            Pos2::new(rect.left(), lanes_rect.bottom() + 2.0),
+            Pos2::new(rect.right(), lanes_rect.bottom() + null_height),
         );
         let lane_height = lanes_rect.height() / self.lanes.len().max(1) as f32;
         mark(ui.ctx(), "ruler", 0, Rect::from_min_size(rect.min, Vec2::new(rect.width(), ruler_height)));
@@ -1630,6 +1844,12 @@ impl StudioApp {
                 Vec2::new(lanes_rect.width(), lane_height - 2.0),
             );
             self.draw_lane(ui.ctx(), &painter, i, lane_rect, heard[i], to_db(gain) - lowest);
+        }
+
+        // The null test: the difference's level over time.
+        if let Some(test) = &null {
+            self.draw_null(&painter, null_rect, test, view_start, view_span);
+            mark(ui.ctx(), "null-band", 0, null_rect);
         }
 
         // The keyboard note: a band as long as it was held, as strong as
@@ -1921,6 +2141,71 @@ impl StudioApp {
         }
     }
 
+    /// The null test's band: the difference's peak level over time (dBFS,
+    /// down to −150), and a verdict.
+    fn draw_null(&self, painter: &egui::Painter, rect: Rect, test: &NullTest, start: f64, span: f64) {
+        let hearing = self.hearing_difference();
+        painter.rect_filled(rect, 0.0, Color32::from_gray(if hearing { 34 } else { 26 }));
+        let (a, b) = (lane_letter(self.null.a), lane_letter(self.null.b));
+        let color = if test.identical() { Color32::from_rgb(110, 210, 120) } else { Color32::from_rgb(255, 190, 90) };
+        let y_of = |db: f32| {
+            rect.bottom() - ((db - null_test::FLOOR_DB) / -null_test::FLOOR_DB).clamp(0.0, 1.0) * rect.height()
+        };
+        for db in [-120.0, -96.0, -60.0, -24.0] {
+            let y = y_of(db);
+            painter.line_segment(
+                [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+                Stroke::new(1.0, Color32::from_gray(44)),
+            );
+            painter.text(
+                Pos2::new(rect.right() - 4.0, y),
+                Align2::RIGHT_CENTER,
+                format!("{db:.0}"),
+                FontId::monospace(9.0),
+                Color32::from_gray(110),
+            );
+        }
+        if !test.identical() {
+            let rate = self.sample_rate as f64;
+            let width = rect.width().max(1.0) as usize;
+            let mut points = Vec::with_capacity(width);
+            for px in 0..width {
+                let t0 = start + px as f64 / width as f64 * span;
+                let t1 = start + (px + 1) as f64 / width as f64 * span;
+                let c0 = (t0 * rate / test.hop as f64) as usize;
+                let c1 = ((t1 * rate / test.hop as f64) as usize).max(c0);
+                if c0 >= test.envelope_db.len() {
+                    break;
+                }
+                let level = test.envelope_db[c0..=c1.min(test.envelope_db.len() - 1)]
+                    .iter()
+                    .fold(null_test::FLOOR_DB, |m, &v| m.max(v));
+                points.push(Pos2::new(rect.left() + px as f32, y_of(level)));
+            }
+            // Filled below the line, a column at a time.
+            for pair in points.windows(2) {
+                let column =
+                    vec![pair[0], pair[1], Pos2::new(pair[1].x, rect.bottom()), Pos2::new(pair[0].x, rect.bottom())];
+                painter.add(Shape::convex_polygon(column, color.gamma_multiply(0.25), Stroke::NONE));
+            }
+            painter.add(Shape::line(points, Stroke::new(1.5, color)));
+        }
+        let label = match (test.identical(), self.japanese) {
+            (true, true) => format!("{a} − {b} · 完全に一致（差は 0）"),
+            (true, false) => format!("{a} − {b} · bit-identical (no difference)"),
+            (false, true) => format!("{a} − {b} · 差の音量 (dBFS)"),
+            (false, false) => format!("{a} − {b} · difference (dBFS)"),
+        };
+        let headphones = if hearing { format!("  {}", icon::HEADPHONES) } else { String::new() };
+        painter.text(
+            rect.left_top() + Vec2::new(6.0, 3.0),
+            Align2::LEFT_TOP,
+            format!("{label}{headphones}"),
+            FontId::proportional(12.0),
+            color,
+        );
+    }
+
     fn draw_closeup(&self, painter: &egui::Painter, rect: Rect, position: f64, heard: &[bool]) {
         painter.rect_filled(rect, 0.0, Color32::from_gray(12));
         let mid = rect.center().y;
@@ -2094,9 +2379,10 @@ impl eframe::App for StudioApp {
 }
 
 /// Command-line arguments replace the saved lanes and program:
-/// `--sf2 <file>`, `--mac <file>`, `--mac-builtin`, `--wav <file>` (one lane
-/// each, in order), `--midi <file>`, `--mode create|tune|compare`,
-/// `--create <sf2>`, `--theme light|dark|system`.
+/// `--sf2 <file>` (SF2, DLS or SFZ), `--mac <file>`, `--mac-builtin`,
+/// `--wav <file>` (one lane each, in order), `--midi <file>`,
+/// `--mode create|tune|compare`, `--create <sf2 or sfz>`, `--null` (show the
+/// null test), `--theme light|dark|system`.
 fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
     let arguments: Vec<String> = arguments.collect();
     let mut lanes = Vec::new();
@@ -2137,6 +2423,10 @@ fn apply_arguments(saved: &mut Saved, arguments: impl Iterator<Item = String>) {
             ("--midi", Some(path)) => {
                 saved.program = Program::Midi(path.clone());
                 2
+            }
+            ("--null", _) => {
+                saved.layers.null_test = true;
+                1
             }
             ("--mode", Some(mode)) => {
                 saved.mode = match mode.to_str() {

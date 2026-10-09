@@ -43,13 +43,14 @@ sf2studio --sf2 piano.sf2 --mac piano.sf2 --mac-builtin --midi song.mid --mode c
 
 | Option | Does |
 |---|---|
-| `--sf2 <file>` | Adds an sf2synth lane playing the file |
+| `--sf2 <file>` | Adds an sf2synth lane playing the file (SF2, DLS or SFZ) |
 | `--mac <file>` | Adds a macOS-sampler lane playing the file |
 | `--mac-builtin` | Adds a macOS-sampler lane playing macOS's GS set |
 | `--wav <file>` | Adds a WAV lane |
 | `--midi <file>` | Plays the MIDI file |
 | `--mode create\|tune\|compare` | Opens in that mode |
-| `--create <sf2>` | Opens Create starting from that file |
+| `--create <file>` | Opens Create starting from that file (SF2, DLS or SFZ) |
+| `--null` | Shows the null test (Compare) |
 | `--theme light\|dark\|system` | Sets the theme |
 | `--show help\|about` | Opens that window at launch |
 
@@ -61,6 +62,7 @@ Lane options add lanes in the order given and replace the saved lanes.
 |---|---|
 | SF2 (`.sf2`) | Instruments in lanes; the source and the result of Create |
 | DLS (`.dls`) | Instruments in lanes (sf2synth reads DLS too); a source for Create. macOS and Windows each have a GS set built in. |
+| SFZ (`.sfz`) with WAV or FLAC samples | Instruments in sf2synth lanes; a source for Create; what **Save SFZ…** writes (with FLAC samples). The samples are read into memory. |
 | WAV (`.wav`) | Recording lanes; recordings for Create. 16/24/32-bit or float, mono or stereo, any sample rate (converted). |
 | MIDI (`.mid`, `.midi`, `.kar`, `.rmi`) | What the lanes play |
 | TOML (`.toml`) | sf2synth settings saved from Tune |
@@ -127,6 +129,9 @@ and Create's source and shaping settings. Not saved: the made instrument
 | “Layers” has no effect in Create | Layers are only made when one sample covers every velocity; the source has velocity layers of its own. |
 | The instrument from Create is gone after restarting | It isn't kept; Save SF2… before quitting. |
 | macOS sampler isn't offered | It is part of macOS; on Windows, compare with recordings instead. |
+| A lane says “N left out on loading” | The SFZ uses opcodes sf2synth doesn't follow, or some of its samples couldn't be read; hover over it for the list. |
+| A macOS-sampler lane can't play an SFZ | The macOS sampler reads SF2 and DLS only; use sf2synth for SFZ. |
+| The null test says the lanes differ though they should be the same | Make sure **Match levels first** is off and both lanes use the same synthesizer and settings. **First difference at** shows where they part. |
 
 ## Glossary
 
@@ -134,6 +139,9 @@ and Create's source and shaping settings. Not saved: the made instrument
 |---|---|
 | SF2 (SoundFont 2) | A file of samples and the rules for playing them as instruments |
 | DLS | Downloadable Sounds, a similar format; the systems' GS sets are DLS |
+| SFZ | A text file of regions (keys, velocities, settings) playing WAV or FLAC samples beside it |
+| FLAC | Lossless audio compression: the samples exactly, at about a half to a sixth of the size |
+| Null test | Subtracting one rendering from another: nothing is left when they are identical |
 | GS set | The General MIDI instruments built into macOS and Windows (Roland GS) |
 | Preset · bank · program | An instrument in an SF2, numbered `bank:program` |
 | Velocity | How hard a note is played, 1–127 |

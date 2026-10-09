@@ -25,7 +25,7 @@ pub enum Engine {
 pub enum SoundFile {
     /// The file of lane A.
     SameAsA,
-    /// An SF2 (or DLS) file.
+    /// An SF2, DLS or SFZ file.
     File(PathBuf),
     /// macOS's built-in General MIDI set (Roland GS, DLS).
     MacBuiltIn,
@@ -163,12 +163,12 @@ impl Renderer {
         self.receiver.try_iter().collect()
     }
 
-    /// The SF2 at `path`, from the cache or read now.
+    /// The SF2, DLS or SFZ at `path`, from the cache or read now.
     pub fn font(&self, path: &Path) -> Result<Arc<SoundFont>, String> {
         load_font(path, &self.fonts)
     }
 
-    /// Forgets a cached SF2 so it is read again (it changed on disk).
+    /// Forgets a cached instrument so it is read again (it changed on disk).
     pub fn forget_font(&self, path: &Path) {
         if let Ok(mut fonts) = self.fonts.lock() {
             fonts.remove(path);
@@ -185,6 +185,9 @@ fn run(job: &Job, fonts: &Mutex<HashMap<PathBuf, Arc<SoundFont>>>) -> Result<(Ar
                     let font = load_font(&path, fonts)?;
                     render_sf2(font, tuning, sound, &job.program, job.sample_rate)?
                 }
+                Engine::MacSampler if is_sfz(&path) => {
+                    return Err("The macOS sampler can't play SFZ files: choose sf2synth for this lane.".into());
+                }
                 Engine::MacSampler => crate::mac_sampler::render(
                     &path,
                     sound.bank,
@@ -200,12 +203,18 @@ fn run(job: &Job, fonts: &Mutex<HashMap<PathBuf, Arc<SoundFont>>>) -> Result<(Ar
     Ok((Arc::new(rendered), Arc::new(analysis)))
 }
 
+/// Whether a path is an SFZ file (by its extension).
+pub fn is_sfz(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("sfz"))
+}
+
 fn load_font(path: &Path, fonts: &Mutex<HashMap<PathBuf, Arc<SoundFont>>>) -> Result<Arc<SoundFont>, String> {
     if let Some(font) = fonts.lock().ok().and_then(|f| f.get(path).cloned()) {
         return Ok(font);
     }
-    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let font = Arc::new(SoundFont::from_bytes(bytes).map_err(|e| e.to_string())?);
+    // SF2 and DLS by their contents, SFZ (with its WAV or FLAC samples) by
+    // the extension.
+    let font = Arc::new(SoundFont::open(path).map_err(|e| format!("{}: {e}", path.display()))?);
     if let Ok(mut cache) = fonts.lock() {
         cache.insert(path.to_path_buf(), Arc::clone(&font));
     }

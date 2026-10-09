@@ -2,19 +2,21 @@
 
 # sf2studio
 
-Make, tune and compare SF2 instruments — a desktop app for macOS and
-Windows built on [sf2synth](https://github.com/albos-inc/sf2synth).
+Make, tune and compare SF2 and SFZ instruments — a desktop app for macOS
+and Windows built on [sf2synth](https://github.com/albos-inc/sf2synth).
 
 | Mode | What it does |
 |---|---|
-| **Create** | Make a new SF2 from a preset of an existing SF2, one recording per note, or the built-in piano-like synthesis. Shape volume, brightness and warmth, touch (velocity range, curve, synthesized velocity layers), attack, fade and release, stretch tuning, stereo width and reverb; play it on the keyboard as it is made, save it, or send it to Compare. |
+| **Create** | Make a new SF2 from a preset of an existing SF2 or SFZ, one recording per note, or the built-in piano-like synthesis. Shape volume, brightness and warmth, touch (velocity range, curve, synthesized velocity layers), attack, fade and release, stretch tuning, stereo width and reverb; play it on the keyboard as it is made, save it as SF2 or as SFZ with lossless FLAC samples (the same sound, a fraction of the size), or send it to Compare. |
 | **Tune** | Play the 88-key keyboard (or a MIDI keyboard) with sf2synth and an SF2: a key sounds at once, and when you release it the note is rendered in every lane with its spectrogram, harmonics and level. Press high on a key for soft, low for loud, or fix the velocity and length. Adjust the synthesizer as you listen, play a song or a test pattern, and save the settings as TOML. |
-| **Compare** | Put up to nine lanes side by side — sf2synth with any SF2, the macOS sampler, or a WAV recording. Every lane is heard by default; turn each one's output on and off while playing (sample-aligned, level-matched, click-free), or solo one. |
+| **Compare** | Put up to nine lanes side by side — sf2synth with any SF2, DLS or SFZ, the macOS sampler, or a WAV recording. Every lane is heard by default; turn each one's output on and off while playing (sample-aligned, level-matched, click-free), or solo one. |
 
 Every lane shows a spectrogram, its level in dB and a close-up of the
 waveform at the playhead, with a piano roll of the notes above; each view
 can be turned on and off. Compare adds measurement charts (velocity against
-level and brightness, decay per key) and an ABX blind test.
+level and brightness, decay per key), a null test (one lane minus another,
+seen over time and heard, to prove two renderings identical or find where
+they part) and an ABX blind test.
 
 Light, dark or system theme; English and Japanese; Help, update check and
 About in the Help menu.
@@ -52,9 +54,9 @@ Lanes can also be given on the command line:
 cargo run --release -- --sf2 piano.sf2 --mac piano.sf2 --mac-builtin --midi song.mid --mode compare
 ```
 
-`--sf2`, `--mac` (macOS sampler), `--mac-builtin` (macOS's GS set) and
-`--wav` add lanes in order; `--create <sf2>` opens Create on a file;
-`--theme light|dark|system`.
+`--sf2` (an SF2, DLS or SFZ file), `--mac` (macOS sampler), `--mac-builtin`
+(macOS's GS set) and `--wav` add lanes in order; `--create <file>` opens
+Create on a file; `--null` shows the null test; `--theme light|dark|system`.
 
 `docs/tools/capture.sh` takes the guide's screenshots again (macOS:
 `cargo run --features capture -- --capture docs/images`), and

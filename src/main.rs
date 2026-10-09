@@ -12,6 +12,7 @@ mod keyboard;
 mod mac_sampler;
 mod measure;
 mod midi_in;
+mod null_test;
 mod patterns;
 mod render;
 mod theme;

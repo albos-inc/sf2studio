@@ -49,7 +49,7 @@ left panel, on the timeline, in the charts and in the transport.
 | In the panel | What it does |
 |---|---|
 | **③ Synth** | **sf2synth** — the synthesizer this app is built on. **macOS sampler** — Apple's AVAudioUnitSampler, what most iOS and macOS apps play SF2 files with (macOS only). **WAV recording** — a sound file played as it is. |
-| **④ Sound** | The instrument file: **Choose a file (SF2 / DLS)…**, the **built-in GS set** of macOS or Windows, or — for lanes B to I — **Same as A**. |
+| **④ Sound** | The instrument file: **Choose a file (SF2 / DLS / SFZ)…**, the **built-in GS set** of macOS or Windows, or — for lanes B to I — **Same as A**. SFZ instruments (with WAV or FLAC samples) play with sf2synth only. When loading left something out — SFZ opcodes sf2synth doesn't follow, samples it couldn't read — the lane says how many; hover over it for the list. |
 | **⑤ Preset** | Which instrument in the file, as `bank:program name`. For the macOS sampler the list is the 128 General MIDI names plus Drums (128:0). Hidden when the lane plays the same as A. |
 | **⑥ Lane figures** | **level** (average level of the sounding parts) · **peak** · **gain** (the level-matching correction) · **brightness** (the typical spectral centroid: higher = brighter). “Rendering…” while the lane is being made; an error in red if the file can't be played. |
 | **⑦ ×** | Removes the lane (there is always at least one). |
@@ -118,6 +118,7 @@ Turn views on and off to give the others more room:
 3. **Waveform close-up** — the strip at the bottom.
 4. **Piano roll** — the notes played, above the lanes.
 5. **Measurements** — the charts (Compare only).
+6. **Null test** — one lane minus another (Compare only).
 
 What each view shows: [Reading the display](reading-the-display.md).
 
@@ -143,6 +144,29 @@ has something to measure — choose **Velocity sweep**, **Long notes** or
    across the keyboard. Higher: longer sustain.
 
 More on reading them: [Reading the display](reading-the-display.md#measurement-charts).
+
+## Null test
+
+![Null test](../images/en/null-test.png)
+
+Subtracts one lane from another, sample by sample: when two lanes play
+exactly the same, nothing is left. Use it to check that a conversion — an
+SF2 saved as SFZ, say — or a change of settings leaves the sound alone, or
+to see where and how much two instruments part.
+
+1. **The lanes** — A − B to start with; choose any two.
+2. **Match levels first** — off: the lanes as they are, for a strict test.
+   On: each lane at its matched level, so only differences beyond loudness
+   remain.
+3. **Hear the difference** — plays the difference instead of the lanes
+   (switching is click-free); **boost** raises it by up to 60 dB, so faint
+   differences can be heard.
+4. **The verdict** — “bit-identical” in green when nothing differs at all.
+   Otherwise the difference's peak (dBFS), its level relative to the first
+   lane (−60 dB: a thousandth of it), and the share of samples that differ; **First difference at**
+   moves the playhead there and zooms in.
+5. **The difference over time** — its peak level along the timeline, from
+   −150 dBFS (nothing) up.
 
 ## The timeline
 

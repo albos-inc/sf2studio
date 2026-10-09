@@ -19,7 +19,7 @@ use crate::tuning::VelocityCurve;
 /// What a new instrument is made from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Origin {
-    /// A preset of an SF2 file.
+    /// A preset of an SF2, DLS or SFZ file.
     Sf2 { path: Option<PathBuf>, bank: u16, program: u8 },
     /// One WAV file per note (the key read from the file name, or detected).
     Recordings { files: Vec<PathBuf> },
@@ -141,18 +141,20 @@ fn to_i16(x: f32) -> i16 {
     (x * 32768.0).round().clamp(-32768.0, 32767.0) as i16
 }
 
-/// The regions of an SF2 preset.
+/// The regions of a preset. Of an SFZ instrument, the regions a first
+/// note-on plays (no release or controller-triggered ones, the first of a
+/// round robin), with their volume baked in.
 pub fn from_sf2(font: &SoundFont, bank: u16, program: u8) -> Result<Vec<Region>, String> {
     let index = font.find_preset(bank, program as u16).ok_or_else(|| format!("no preset {bank}:{program}"))?;
     let preset = &font.presets()[index];
     let mut regions = Vec::new();
     // Zones playing the same sample points share them.
-    let mut shared: std::collections::HashMap<(i64, i64), Arc<Vec<i16>>> = std::collections::HashMap::new();
+    let mut shared: std::collections::HashMap<(i64, i64, u32), Arc<Vec<i16>>> = std::collections::HashMap::new();
     for preset_zone in preset.zones() {
         let Some(instrument) = font.instruments().get(preset_zone.link()) else { continue };
         for zone in instrument.zones() {
             let Some(sample) = font.samples().get(zone.link()) else { continue };
-            if sample.is_rom() {
+            if sample.is_rom() || !zone.plays_on_first_note_on() {
                 continue;
             }
             let (Some(keys), Some(velocities)) = (
@@ -178,8 +180,11 @@ pub fn from_sf2(font: &SoundFont, bank: u16, program: u8) -> Result<Vec<Region>,
                 && loop_start >= start
                 && loop_end <= end
                 && loop_end - loop_start >= 2;
-            let points = Arc::clone(shared.entry((start, end)).or_insert_with(|| {
-                Arc::new(font.sample_points(start as usize..end as usize).into_iter().map(to_i16).collect())
+            let gain = zone.gain();
+            let points = Arc::clone(shared.entry((start, end, gain.to_bits())).or_insert_with(|| {
+                Arc::new(
+                    font.sample_points(start as usize..end as usize).into_iter().map(|x| to_i16(x * gain)).collect(),
+                )
             }));
             let root = match zone.generator(g::OVERRIDING_ROOT_KEY) {
                 Some(k) if (0..=127).contains(&k) => k as u8,
@@ -488,6 +493,8 @@ pub enum Update {
         generation: u64,
         result: Result<Created, String>,
     },
+    /// An SFZ was written (a message), or not (why).
+    Saved(Result<String, String>),
 }
 
 pub struct Job {
@@ -513,8 +520,7 @@ pub fn spawn(job: Job, sender: std::sync::mpsc::Sender<Update>, repaint: impl Fn
                                 Some(font) => font,
                                 None => {
                                     let path = path.as_ref().ok_or("choose an SF2")?;
-                                    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-                                    Arc::new(SoundFont::from_bytes(bytes).map_err(|e| e.to_string())?)
+                                    Arc::new(SoundFont::open(path).map_err(|e| e.to_string())?)
                                 }
                             };
                             from_sf2(&font, *bank, *program)?
@@ -563,6 +569,62 @@ mod tests {
         assert_eq!(zones[0].velocity_range(), (1, 63));
         assert_eq!(zones[1].velocity_range(), (64, 127));
         assert!(!zones[0].modulators().is_empty());
+    }
+
+    #[test]
+    fn a_saved_sfz_plays_as_the_sf2() {
+        use crate::render::{Program, Sound, SoundFile, render_sf2};
+        use crate::tuning::SynthTuning;
+
+        let params = SynthesisParams { decay: 1.0, ..Default::default() };
+        let mut regions = from_synthesis(&params);
+        regions.truncate(4);
+        let voicing = Voicing { layers: 2, release_s: 0.4, stretch_cents: 8.0, ..Default::default() };
+        let sf2 = Arc::new(SoundFont::from_bytes(build(&regions, &voicing, |_| {}).to_bytes()).unwrap());
+        let directory = std::env::temp_dir().join(format!("sf2studio-test-{}", std::process::id()));
+        let path = directory.join("piano.sfz");
+        let files = sf2synth::writer::SfzFiles::from_preset(&sf2, 0, "piano samples/");
+        assert!(files.warnings.is_empty(), "{:?}", files.warnings);
+        files.write(&path).unwrap();
+        let sfz = Arc::new(SoundFont::open(&path).unwrap());
+        std::fs::remove_dir_all(&directory).unwrap();
+
+        let sound = Sound { file: SoundFile::SameAsA, bank: 0, program: 0 };
+        let program = Program::Note { key: 30, velocity: 70, length: 0.5 };
+        let tuning = SynthTuning::default();
+        let a = render_sf2(sf2, &tuning, &sound, &program, 48000).unwrap();
+        let b = render_sf2(sfz, &tuning, &sound, &program, 48000).unwrap();
+        let test = crate::null_test::compare(&a, &b, 1.0, 1.0);
+        assert!(a.left.iter().any(|x| x.abs() > 0.01));
+        assert!(test.identical(), "differs from {:?} s, peak {:?} dBFS", test.first, test.peak_db);
+    }
+
+    #[test]
+    fn an_sfz_is_re_voiced_from_its_first_layer() {
+        let params = SynthesisParams { decay: 0.5, ..Default::default() };
+        let mut regions = from_synthesis(&params);
+        regions.truncate(2);
+        let sf2 = SoundFont::from_bytes(build(&regions, &Voicing::default(), |_| {}).to_bytes()).unwrap();
+        let files = sf2synth::writer::SfzFiles::from_preset(&sf2, 0, "");
+        let first = files.samples[0].0.clone();
+        // A release sound and a second round-robin take that Create leaves out.
+        let text = format!(
+            "{}<region> sample={first} trigger=release\n<region> sample={first} lokey=0 hikey=127 volume=-6 seq_length=2 seq_position=2\n",
+            files.sfz
+        );
+        let load = |path: &str, _: Option<usize>| -> std::io::Result<Vec<u8>> {
+            files
+                .samples
+                .iter()
+                .find(|(p, _)| p == path)
+                .map(|(_, b)| b.clone())
+                .ok_or(std::io::ErrorKind::NotFound.into())
+        };
+        let sfz = SoundFont::from_sfz(&text, "test", &load).unwrap();
+        assert_eq!(sfz.instruments()[0].zones().len(), 4);
+        let from_sfz = from_sf2(&sfz, 0, 0).unwrap();
+        assert_eq!(from_sfz.len(), 2);
+        assert_eq!(from_sfz[0].points[1000], from_sf2(&sf2, 0, 0).unwrap()[0].points[1000]);
     }
 
     #[test]

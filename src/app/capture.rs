@@ -12,7 +12,7 @@ use eframe::egui::{
     Stroke, StrokeKind, Vec2,
 };
 
-use super::{KeyboardSettings, Layers, Mode, StudioApp, View};
+use super::{KeyboardSettings, Layers, Mode, NullState, StudioApp, View};
 use crate::create::dsp::SynthesisParams;
 use crate::create::{Origin, Voicing};
 use crate::patterns::TestPattern;
@@ -631,6 +631,7 @@ fn reset(app: &mut StudioApp, ctx: &egui::Context) {
     app.chrome.updates = false;
     app.message = None;
     app.last_note = None;
+    app.null = NullState::default();
     set_lanes(app, vec![lane_a(), lane_b()]);
     set_program(app, Program::Pattern(TestPattern::VelocitySweep));
     app.focus = 0;
@@ -784,6 +785,7 @@ fn scenes() -> Vec<Step> {
                     callout(3, text("Waveform close-up", "拡大波形"), Bottom),
                     callout(4, text("Piano roll", "ピアノロール"), Bottom),
                     callout(5, text("Measurements", "計測グラフ"), Bottom),
+                    callout(6, text("Null test", "ヌルテスト（差分）"), Bottom),
                 ],
             ),
             shot(
@@ -810,6 +812,29 @@ fn scenes() -> Vec<Step> {
                 ],
             ),
         ]),
+        // The null test: lane A (sf2synth) minus lane B (the macOS sampler).
+        set(|app, _| {
+            app.layers.measure = false;
+            app.layers.null_test = true;
+            app.sync_player();
+            fit(app, 8.6);
+        }),
+        Step::Ready,
+        Step::Shoot(vec![shot(
+            "null-test",
+            pad(union([mark_of("null"), mark_of("null-band")]), [4.0, 34.0, 4.0, 4.0]),
+            vec![
+                callout(1, inside("null", 0, text("−", "−")), Top),
+                callout(2, text("Match levels first", "先に音量を揃える"), Top),
+                callout(3, contains("Hear the difference", "差分を聞く"), Top),
+                callout(4, inside("null", 0, contains("difference peaks", "差のピーク")), Bottom),
+                callout(5, mark_of("null-band"), Over(0.4, 0.35)),
+            ],
+        )]),
+        set(|app, _| {
+            app.layers.null_test = false;
+            app.sync_player();
+        }),
         // A loop, zoomed in.
         set(|app, _| {
             app.layers.measure = false;
@@ -1054,7 +1079,7 @@ fn scenes() -> Vec<Step> {
                 "create-origin-synthesis",
                 pad(mark_of("left"), [0.0, 0.0, 0.0, -150.0]),
                 vec![
-                    callout(1, union([text("An SF2", "既存の SF2"), text("Synthesis", "合成")]), Bottom),
+                    callout(1, union([text("An SF2 / SFZ", "既存の SF2 / SFZ"), text("Synthesis", "合成")]), Bottom),
                     callout(2, row(creating(text("Brightness", "明るさ"))), Right),
                     callout(3, row(text("String stiffness", "弦の硬さ（倍音のずれ）")), Right),
                     callout(4, row(text("Decay (middle C)", "減衰（中央の C）")), Right),
@@ -1102,7 +1127,7 @@ fn scenes() -> Vec<Step> {
                         Over(0.94, 0.12),
                     ),
                     callout(7, contains("Ready", "完成"), Right),
-                    callout(8, text("Save SF2…", "SF2 を保存…"), Bottom),
+                    callout(8, union([text("Save SF2…", "SF2 を保存…"), text("Save SFZ…", "SFZ を保存…")]), Bottom),
                     callout(9, text("Compare with others", "比較に追加"), Bottom),
                     callout(10, text("Reset settings", "設定を初期値に戻す"), Bottom),
                 ],
@@ -1155,7 +1180,7 @@ fn scenes() -> Vec<Step> {
             "create-origin-sf2",
             pad(mark_of("left"), [0.0, 0.0, 0.0, -300.0]),
             vec![
-                callout(1, union([text("An SF2", "既存の SF2"), text("Synthesis", "合成")]), Right),
+                callout(1, union([text("An SF2 / SFZ", "既存の SF2 / SFZ"), text("Synthesis", "合成")]), Right),
                 callout(2, text("gs_instruments.dls", "gs_instruments.dls"), Right),
                 callout(3, contains("0:0", "0:0"), Right),
             ],

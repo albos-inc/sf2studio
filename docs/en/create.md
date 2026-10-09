@@ -18,13 +18,16 @@ it to Compare to hear it next to other instruments.
 
 ## Start from
 
-### An SF2
+### An SF2 or SFZ
 
 <img src="../images/en/create-origin-sf2.png" width="394" alt="From an SF2">
 
-1. Choose **An SF2**.
-2. **Choose an SF2 or DLS…** — the file to start from. DLS files (such as the
-   systems' built-in GS sets) work too.
+1. Choose **An SF2 / SFZ**.
+2. **Choose an SF2, DLS or SFZ…** — the file to start from. DLS files (such
+   as the systems' built-in GS sets) and SFZ instruments work too. Of an SFZ,
+   the regions a plain note plays are used, with their volume: release
+   sounds and controller-triggered regions are left out, and of a round
+   robin only its first take.
 3. The **preset** to re-voice.
 
 The preset's samples, key and velocity ranges and its own settings are kept;
@@ -138,7 +141,10 @@ offered when saving.
    `Ready — play it on the keyboard below · 30 zones · 13.3 MB · 5.6 s`:
    zones (sample regions), the file size and how long making it took. Errors
    appear in red.
-8. **Save SF2…** — writes the instrument as an SF2 file.
+8. **Save SF2…** · **Save SFZ…** — writes the instrument as an SF2 file, or
+   as an SFZ file with its samples as lossless FLAC in a folder beside it
+   (`<name> samples`). sf2synth plays both exactly alike; the SFZ is a
+   fraction of the size. Writing the SFZ runs in the background.
 9. **Compare with others** — adds a lane playing this instrument (or updates
    the one added before). From then on the lane is updated every time the
    instrument is made again, so Compare always has the latest version.

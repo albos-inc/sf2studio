@@ -33,6 +33,8 @@ pub(super) struct CreateState {
     /// The Compare lane showing the made instrument.
     lane: Option<u64>,
     pub(super) message: Option<String>,
+    /// An SFZ is being written.
+    saving: bool,
 }
 
 impl CreateState {
@@ -52,6 +54,7 @@ impl CreateState {
             receiver,
             lane: None,
             message: None,
+            saving: false,
         }
     }
 
@@ -64,7 +67,7 @@ impl CreateState {
     }
 
     pub fn busy(&self) -> bool {
-        self.pending.is_some() || self.progress.is_some()
+        self.pending.is_some() || self.progress.is_some() || self.saving
     }
 
     pub(super) fn changed(&mut self) {
@@ -104,6 +107,10 @@ impl StudioApp {
                     }
                 }
                 Update::Done { .. } => {}
+                Update::Saved(result) => {
+                    self.create.saving = false;
+                    self.create.message = Some(result.unwrap_or_else(|error| error));
+                }
             }
         }
         if self.create.pending.is_some_and(|at| at.elapsed() >= MAKE_DELAY) {
@@ -148,7 +155,11 @@ impl StudioApp {
         };
         let mut chosen = kind;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut chosen, Kind::Sf2, labeled(icon::FILE_AUDIO, t("An SF2", "既存の SF2")));
+            ui.selectable_value(
+                &mut chosen,
+                Kind::Sf2,
+                labeled(icon::FILE_AUDIO, t("An SF2 / SFZ", "既存の SF2 / SFZ")),
+            );
             ui.selectable_value(&mut chosen, Kind::Recordings, labeled(icon::MICROPHONE, t("Recordings", "録音")));
             ui.selectable_value(&mut chosen, Kind::Synthesis, labeled(icon::WAVE_SINE, t("Synthesis", "合成")));
         });
@@ -165,15 +176,16 @@ impl StudioApp {
         match &mut self.create.origin {
             Origin::Sf2 { path, bank, program } => {
                 ui.label(t(
-                    "Re-voice a preset of an SF2 or DLS: its samples are kept and shaped by the settings on the right.",
-                    "SF2 や DLS のプリセットを作り直します。サンプルはそのまま使い、右の設定で整えます。",
+                    "Re-voice a preset of an SF2, DLS or SFZ: its samples are kept and shaped by the settings on the right. Of an SFZ, the regions a plain note plays are used (no release sounds, the first of a round robin).",
+                    "SF2・DLS・SFZ のプリセットを作り直します。サンプルはそのまま使い、右の設定で整えます。SFZ からは、普通に鍵盤を弾いて鳴る音を使います（離鍵時の音は使わず、ラウンドロビンは最初の 1 つだけ）。",
                 ));
                 let label = path
                     .as_deref()
                     .map(file_name)
-                    .unwrap_or_else(|| t("Choose an SF2 or DLS…", "SF2 / DLS を選ぶ…").to_string());
+                    .unwrap_or_else(|| t("Choose an SF2, DLS or SFZ…", "SF2 / DLS / SFZ を選ぶ…").to_string());
                 if ui.button(label).clicked()
-                    && let Some(chosen) = rfd::FileDialog::new().add_filter("SF2 / DLS", &["sf2", "dls"]).pick_file()
+                    && let Some(chosen) =
+                        rfd::FileDialog::new().add_filter("SF2 / DLS / SFZ", &["sf2", "dls", "sfz"]).pick_file()
                 {
                     *path = Some(chosen);
                     *bank = 0;
@@ -356,6 +368,16 @@ impl StudioApp {
                     self.save_created();
                 }
                 if ui
+                    .add_enabled(ready && !self.create.saving, egui::Button::new(labeled(icon::EXPORT, t("Save SFZ…", "SFZ を保存…"))))
+                    .on_hover_text(t(
+                        "An SFZ file and its samples as lossless FLAC, in a folder beside it: plays the same as the SF2, a fraction of the size.",
+                        "SFZ ファイルと、そのサンプル（可逆圧縮の FLAC）を隣のフォルダに保存します。SF2 とまったく同じ音のまま、サイズは数分の一になります。",
+                    ))
+                    .clicked()
+                {
+                    self.save_created_sfz(ui.ctx());
+                }
+                if ui
                     .add_enabled(ready, egui::Button::new(labeled(icon::SCALES, t("Compare with others", "比較に追加"))))
                     .on_hover_text(t("Adds (or updates) a lane playing this instrument.", "この音源を鳴らすレーンを追加（または更新）します。"))
                     .clicked()
@@ -371,13 +393,19 @@ impl StudioApp {
                     self.create.changed();
                 }
             });
+            if self.create.saving {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(t("Writing the SFZ and its FLAC samples…", "SFZ と FLAC サンプルを書き出し中…"));
+                });
+            }
             if let Some(message) = &self.create.message {
                 ui.weak(message);
             }
             ui.add_space(8.0);
             ui.label(RichText::new(t(
-                "Brightness and warmth are baked into the samples; touch, sustain and tuning are written as SF2 parameters, so other SF2 players follow them too.",
-                "明るさと温かみはサンプルに焼き込みます。タッチ・余韻・調律は SF2 のパラメータとして書くので、ほかの SF2 プレイヤーでも同じように反映されます。",
+                "Brightness and warmth are baked into the samples; touch, sustain and tuning are written as SF2 (or SFZ) parameters, so other players follow them too.",
+                "明るさと温かみはサンプルに焼き込みます。タッチ・余韻・調律は SF2（または SFZ）のパラメータとして書くので、ほかのプレイヤーでも同じように反映されます。",
             )).small().weak());
         });
     }
@@ -391,6 +419,29 @@ impl StudioApp {
                 Err(e) => e.to_string(),
             });
         }
+    }
+
+    /// Writes the instrument as SFZ with FLAC samples (in the background:
+    /// encoding a large instrument takes a while).
+    fn save_created_sfz(&mut self, ctx: &egui::Context) {
+        let Some((created, _)) = &self.create.created else { return };
+        let stem = safe_name(&self.create.voicing.name);
+        let Some(path) =
+            rfd::FileDialog::new().add_filter("SFZ", &["sfz"]).set_file_name(format!("{stem}.sfz")).save_file()
+        else {
+            return;
+        };
+        let font = Arc::clone(&created.font);
+        let sender = self.create.sender.clone();
+        let japanese = self.japanese;
+        let ctx = ctx.clone();
+        self.create.saving = true;
+        self.create.message = None;
+        std::thread::spawn(move || {
+            let result = save_sfz(&font, &path, japanese);
+            let _ = sender.send(Update::Saved(result));
+            ctx.request_repaint();
+        });
     }
 
     /// Writes the instrument to a scratch file and shows it in a lane.
@@ -433,6 +484,29 @@ impl StudioApp {
             format!("In lane {letter}.")
         });
     }
+}
+
+/// Writes `font`'s first preset at `path` as SFZ, its FLAC samples in a
+/// folder named after it; a message saying what was written.
+fn save_sfz(font: &SoundFont, path: &std::path::Path, japanese: bool) -> Result<String, String> {
+    let stem = path.file_stem().map_or("instrument".into(), |s| s.to_string_lossy().into_owned());
+    let files = sf2synth::writer::SfzFiles::from_preset(font, 0, &format!("{stem} samples/"));
+    files.write(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let megabytes = files.samples.iter().map(|(_, bytes)| bytes.len()).sum::<usize>() as f64 / 1_048_576.0;
+    let mut message = if japanese {
+        format!("保存しました: {}（FLAC {} 個、{megabytes:.1} MB）", path.display(), files.samples.len())
+    } else {
+        format!("Saved {} ({} FLAC files, {megabytes:.1} MB)", path.display(), files.samples.len())
+    };
+    if !files.warnings.is_empty() {
+        message.push_str(if japanese {
+            " SFZ で表せず省いたもの: "
+        } else {
+            " Left out (SFZ can't say it): "
+        });
+        message.push_str(&files.warnings.join(", "));
+    }
+    Ok(message)
 }
 
 /// A file name from an instrument name.

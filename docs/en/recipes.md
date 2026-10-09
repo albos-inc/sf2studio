@@ -33,13 +33,17 @@ click or choose in the app.
 15. [Play with a MIDI keyboard](#15-play-with-a-midi-keyboard)
 16. [Play exactly the same note again and again](#16-play-exactly-the-same-note-again-and-again)
 
+**Converting**
+
+17. [Save an instrument as a small SFZ and prove it sounds the same](#17-save-an-instrument-as-a-small-sfz-and-prove-it-sounds-the-same)
+
 ---
 
 ## 1. Compare two SF2 files
 
 1. Switch to **Compare**.
 2. In lane **A**, set **Synth** to **sf2synth**, open **Sound** and choose
-   **Choose a file (SF2 / DLS)…**, and pick the first SF2. Choose the
+   **Choose a file (SF2 / DLS / SFZ)…**, and pick the first SF2. Choose the
    instrument under **Preset**.
 3. In lane **B**, do the same with the second SF2 (Synth **sf2synth** too, so
    only the instrument differs). Need a third? **Add lane**.
@@ -150,7 +154,7 @@ The same TOML can configure sf2synth in your own program; see
 
 ## 9. Make a brighter, longer version of an SF2 piano
 
-1. **Create** → **Start from: An SF2** → **Choose an SF2 or DLS…** → the
+1. **Create** → **Start from: An SF2 / SFZ** → **Choose an SF2, DLS or SFZ…** → the
    piano → choose its **preset**.
 2. Type a **Name**.
 3. **Brightness (highs)** up a few dB for a crisper tone; **Warmth (lows)**
@@ -223,3 +227,14 @@ The same TOML can configure sf2synth in your own program; see
 2. **Fixed length** on, set the time (for example 2 s).
 3. Click a key: it plays at that velocity for that time, however you click.
    Change a setting and click again to hear exactly the difference.
+
+## 17. Save an instrument as a small SFZ and prove it sounds the same
+
+1. Make (or re-voice) an instrument in **Create**.
+2. **Save SFZ…** and choose a name: the SFZ file is written with its
+   samples as lossless FLAC in a folder beside it.
+3. **Compare with others** — a lane plays the instrument as made.
+4. **Compare** → **Add lane** → **Sound** → **Choose a file (SF2 / DLS /
+   SFZ)…** → the SFZ you saved.
+5. **Show: Null test**, and choose those two lanes: “bit-identical” — the
+   SFZ plays exactly as the SF2 does.

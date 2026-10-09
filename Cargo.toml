@@ -22,7 +22,7 @@ realfft = "3.5.0"
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sf2synth = { git = "https://github.com/albos-inc/sf2synth", tag = "v0.3.1" }
+sf2synth = { git = "https://github.com/albos-inc/sf2synth", tag = "v0.4.0" }
 toml = "1.1.6"
 ureq = { version = "3.4.2", default-features = false, features = ["native-tls", "gzip"] }
 png = { version = "0.18.1", optional = true }

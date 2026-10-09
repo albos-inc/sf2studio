@@ -1,6 +1,6 @@
 # sf2studio guide
 
-sf2studio makes, tunes and compares SF2 instruments. It plays them with
+sf2studio makes, tunes and compares SF2 (and SFZ) instruments. It plays them with
 [sf2synth](https://github.com/albos-inc/sf2synth) (and, on macOS, with the
 system's own sampler), draws what you hear, and lets you switch between
 instruments while the music plays.
@@ -12,9 +12,9 @@ instruments while the music plays.
 | Page | What is in it |
 |---|---|
 | [Getting started](getting-started.md) | The window, the top bar, menus, the first launch and what is remembered |
-| [Compare](compare.md) | Lanes, the “Play” content, switching what you hear, matching levels, measurement charts, the blind test |
+| [Compare](compare.md) | Lanes, the “Play” content, switching what you hear, matching levels, measurement charts, the null test, the blind test |
 | [Tune](tune.md) | The keyboard, rendering a single note in every lane, every sf2synth setting, saving settings as TOML |
-| [Create](create.md) | Making an SF2 from an SF2, recordings or synthesis; every shaping setting; saving and comparing |
+| [Create](create.md) | Making an SF2 from an SF2 or SFZ, recordings or synthesis; every shaping setting; saving as SF2 or SFZ and comparing |
 | [Reading the display](reading-the-display.md) | Spectrogram, level line, waveform close-up, piano roll, harmonics, the keyboard's marks and the charts |
 | [Recipes](recipes.md) | Step-by-step: “I want to …” |
 | [Reference](reference.md) | Keys, mouse, command line, files, what is saved, troubleshooting, glossary |
