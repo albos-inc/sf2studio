@@ -106,6 +106,9 @@ impl SynthTuning {
         settings.reverb.enabled = self.reverb_level > 0.0;
         settings.chorus.level = self.chorus_level;
         settings.chorus.enabled = self.chorus_level > 0.0;
+        // Measurements and A/B comparisons need the synthesizer's own output:
+        // no limiter turning loud notes down (nor its 1 ms of delay).
+        settings.limiter = false;
         for modulator in settings.default_modulators.iter_mut() {
             let velocity = sf2synth::modulator::controller::NOTE_ON_VELOCITY;
             let is_velocity = modulator.source & 0x7f == velocity && modulator.source & source::CC == 0;
@@ -141,6 +144,7 @@ mod tests {
         let defaults = SynthesizerSettings::new(48000);
         assert_eq!(tuned.default_modulators, defaults.default_modulators);
         assert!((tuned.master_gain - 0.5).abs() < 1e-5);
+        assert!(!tuned.limiter);
     }
 
     #[test]
